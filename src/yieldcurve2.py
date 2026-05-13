@@ -69,7 +69,7 @@ class YieldCurve:
         """
          z = self.get_zero_rate(T)
 
-         if slef.compounding == "continuous":
+         if self.compounding == "continuous":
              return float(np.exp(-z * T))
          elif self.compounding == "annual":
              return float(1 / (1 + z) ** T)
@@ -90,7 +90,66 @@ class YieldCurve:
             T_grid = np.linspace(0.1, self.maturities.min(), self.maturities.max(), 300)
             
         else:
-            T_grid = np.linspace(self.maturities.min(), max_maturity, 300) 
+            T_grid = np.linspace(self.maturities.min(), max_maturity, 300)
+
+        z_grid = [self.get_zero_rate(T)*100 for T in T_grid
+                  if self.maturities.min() <= T <= self.maturities.max()]
+        T_grid = [T for T in T_grid
+                  if self.maturities.min() <= T <= self.maturities.max()]
+        
+        label = {"bootstrap": "Bootstrapped zero curve",
+                 "interpolate": "Interpolated curve (cubic spline)",
+                 "direct": "Zero curve"}.get(self.method, "Zero curve")
+        
+        ax.plot(T_grid, z_grid, label=label, color="blue", linewidth=2)
+        ax.scatter(self.maturities, self.zero_rates, color="red", s=80, zorder=5)
+
+        if self.par_yields is not None:
+            ax.scatter(self.maturities, self.par_yields, color="coral", zorder=5, s=60, marker="x", linewidths=2, label="Observed RBA par yields")
+            for mat, yld in zip(self.maturities, self.par_yields):
+                ax.annotate(f"{yld:.2f}%", xy=(mat, yld), xytext=(4,6), textcoords="offset points", fontsize=9)
+        
+
+        title = "Australian Government Bond Yield Curve"
+        if self.dat is not None:
+            title += f"\nDate: {self.date.strftime('%B %Y')}"
+        ax.set_title(title, fontsize=13, fontweight="bold")
+        ax.set_xlabel("Maturity (Years)")
+        ax.set_ylabel("Zero Rate (% per annum)")
+        ax.legend()
+        ax.grid(True)
+        plt.tight_layout()
+        if show:
+            plt.show()
+        return ax
+    
+
+    def plot_discount_factors(self, ax=None, show=True):
+        # plot discount factor curve
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(10,6))
+
+        
+        T_grid = np.linspace(self.maturities.min(), self.maturities.max(), 300)
+        df_grid = [self.get_discount_factor(T) for T in T_grid]
+
+        ax.plot(T_grid, df_grid, color="coral", linewidth=2)
+        ax.scatter(self.maturities,
+                   [self.get_discount_factor(T) for T in self.maturities],
+                   color="coral", zorder=5, s=80)
+ 
+        title = "Discount Factor Curve"
+        if self.date is not None:
+            title += f"\nDate: {self.date.strftime('%B %Y')}"
+        ax.set_title(title, fontsize=13, fontweight="bold")
+        ax.set_xlabel("Maturity (Years)")
+        ax.set_ylabel("Discount Factor")
+        ax.grid(True)
+        plt.tight_layout()
+        if show:
+            plt.show()
+        return ax
+
 
 
 
