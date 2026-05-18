@@ -301,6 +301,75 @@ class EuropeanPut(Derivative):
             "theta": self.theta(),
             "rho": self.rho()
         }
+    
+
+    #FINITE
+
+    def delta_fd(self, h=0.01):
+        """
+        finite difference delta (central difference)
+        """
+        up = EuropeanPut(self.s0+h, self.K, self.T, self.sigma, self.yield_curve).price()
+        down = EuropeanPut(self.s0-h, self.K, self.T, self.sigma, self.yield_curve).price()
+        return (up - down) / (2 * h)
+    
+    def gamma_fd(self,h=0.01):
+        """
+        finite difference gamma (central difference)
+        """
+        up = EuropeanPut(self.s0+h, self.K, self.T, self.sigma, self.yield_curve).price()
+        mid = self.price()
+        down = EuropeanPut(self.s0-h, self.K, self.T, self.sigma, self.yield_curve).price()
+        return (up - 2*mid + down) / (h**2)
+    
+
+    def vega_fd(self,h=0.001):
+        """
+        finite difference vega (central difference)
+        per 1% movement in volatility, so divide by 100
+        """
+        up = EuropeanPut(self.s0, self.K, self.T, self.sigma+h, self.yield_curve).price()
+        down = EuropeanPut(self.s0, self.K, self.T, self.sigma-h, self.yield_curve).price()
+        return (up - down) / (2 * h)/100
+    
+
+    def theta_fd(self,h=1/365):
+        """
+        finite difference theta (forward difference)
+        time moving forward -> T shrinking -> use T-h not T+h
+        per calendar day
+        """
+        down = EuropeanPut(self.s0, self.K, self.T-h, self.sigma, self.yield_curve).price()
+        return (down - self.price())/1
+    
+    def rho_fd(self,h=0.0001):
+        """
+        finite difference rho (central difference via flat rate shift)
+        per 1% movement in rate, so divide by 100
+        """
+        class ShiftedCurve:
+            def __init__(self, base_curve, shift):
+                self._base = base_curve
+                self._shift = shift
+            
+            def get_zero_rate(self, T):
+                return self._base.get_zero_rate(T) + self._shift
+            
+        up = EuropeanPut(self.s0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, +h)).price()
+        down = EuropeanPut(self.s0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, -h)).price()
+        return (up - down) / (2 * h)/100
+    
+    def all_greeks_fd(self):
+        """
+        Return all the Greeks calculated with finite differences in a dictionary.
+        """
+        return {
+            "delta_fd": self.delta_fd(),
+            "gamma_fd": self.gamma_fd(),
+            "vega_fd": self.vega_fd(),
+            "theta_fd": self.theta_fd(),
+            "rho_fd": self.rho_fd()
+        }
 
 
 
