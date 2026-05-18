@@ -233,3 +233,75 @@ class EuropeanPut(Derivative):
             - self.S0 * norm.cdf(-d1)
         )
         return put_price
+    
+
+    #closed-form greeks
+
+
+    def delta(self):
+        """
+        for a put:
+        change = N(d1) - 1 (range: -1 to 0)
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(norm.cdf(d1) - 1)
+    
+
+    def gamma(self):
+        """
+        for a put:
+        (same as call)
+        r = N'(d1)/(S*σ*sqrt(T)) -> always positive
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
+    
+    def vega(self):
+        """
+        for a put:
+        (same as call)
+        v = S*N'(d1)*sqrt(T) -> always positive
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(self.S0 * norm.pdf(d1) * np.sqrt(self.T) / 100)
+    
+    def theta(self):
+        """
+        for a put:
+        o = [-S*N'(d1)*σ/(2*sqrt(T))] + r*K*e^(-r*T)*N(-d2)
+        reported per day
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        term1 = -self.S0 * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
+        term2 = +r*self.K*np.exp(-r*self.T)*norm.cdf(-d2)
+        return float((term1 + term2) / 365)
+    
+    def rho(self):
+        """
+        for a put:
+        p = -K*T*e^(-r*T)*N(-d2)
+        reported per 1% move in rate, so divide by 100
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(-self.K * self.T * np.exp(-r * self.T) * norm.cdf(-d2) / 100)
+    
+    def all_greeks(self):
+        """
+        Return all the Greeks in a dictionary.
+        """
+        return {
+            "delta": self.delta(),
+            "gamma": self.gamma(),
+            "vega": self.vega(),
+            "theta": self.theta(),
+            "rho": self.rho()
+        }
+
+
+
+    
