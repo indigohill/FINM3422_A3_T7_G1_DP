@@ -72,6 +72,69 @@ class EuropeanCall(Derivative):
         )
         return call_price
 
+    def delta(self):
+        """
+        sensitivity of price to spot price (dv/dS)
+        for a call: change = N(d1) (range: 0 to 1)
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(norm.cdf(d1))
+    
+    def gamma(self):
+        """
+        sensitivity of delta to spot price (dV/dS)^2
+        same formula for call and puts: r=N'(d1)/(S*σ*sqrt(T))
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
+    
+    def vega(self):
+        """
+        sensitivity of price to volatility (dV/dσ)
+        same formula for call and puts: v = S*N'(d1)*sqrt(T)
+        > reported per 1% move in volatility, so divide by 100
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(self.S0 * norm.pdf(d1) * np.sqrt(self.T) / 100)
+    
+    def theta(self):
+        """
+        sensitivity of price to time decay (dV/dT)
+        for a call: o = [-S*N'(d1)*σ/(2*sqrt(T))] - r*K*e^(-r*T)*N(d2)
+        reported per day, so divide by 365
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        term1 = -self.S0 * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
+        term2 = -r*self.K*np.exp(-r*self.T)*norm.cdf(d2)
+        return float((term1 + term2) / 365)
+    
+    def rho(self):
+        """
+        sensitivity of price to interest rate (dV/dr)
+        for a call: p = K*T*e^(-r*T)*N(d2)
+        reported per 1% move in rate, so divide by 00
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(self.K * self.T * np.exp(-r * self.T) * norm.cdf(d2) / 100)
+
+    def all_greeks(self):
+        """
+        Return all the Greeks in a dictionary.
+        """
+        return {
+            "delta": self.delta(),
+            "gamma": self.gamma(),
+            "vega": self.vega(),
+            "theta": self.theta(),
+            "rho": self.rho()
+        }
+
+
 
 class EuropeanPut(Derivative):           
     """
