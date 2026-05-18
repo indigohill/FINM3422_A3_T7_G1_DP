@@ -135,6 +135,75 @@ class EuropeanCall(Derivative):
         }
 
 
+#FINITE
+
+    def delta_fd(self, h=0.01):
+        """
+        change = [C(S+h) - C(S-h)]/2h
+        """
+        up = EuropeanCall(self.s0+h, self.K, self.T, self.sigma, self.yield_curve).price()
+        down = EuropeanCall(self.s0-h, self.K, self.T, self.sigma, self.yield_curve).price()
+        return (up - down) / (2 * h)
+    
+    def gamma_fd(self,h=0.01):
+        """
+        r = [C(S+h) - 2C(S) + C(S-h)]/h^2
+        """
+        up = EuropeanCall(self.s0+h, self.K, self.T, self.sigma, self.yield_curve).price()
+        mid = EuropeanCall(self.s0, self.K, self.T, self.sigma, self.yield_curve).price()
+        down = EuropeanCall(self.s0-h, self.K, self.T, self.sigma, self.yield_curve).price()
+        return (up - 2*mid + down) / (h**2)
+    
+
+    def vega_fd(self,h=0.001):
+        """
+        v = [C(σ+h) - C(σ-h)]/2h
+        """
+        up = EuropeanCall(self.s0, self.K, self.T, self.sigma+h, self.yield_curve).price()
+        down = EuropeanCall(self.s0, self.K, self.T, self.sigma-h, self.yield_curve).price()
+        return (up - down) / (2 * h)/100
+    
+    def theta_fd(self,h=1/365):
+        """
+        o = [C(T+h) - C(T-h)]/2h
+        time moving forward -> T shrinking -> use T-h not T+h
+        """
+        down = EuropeanCall(self.s0, self.K, self.T-h, self.sigma, self.yield_curve).price()
+        return (down - self.price())/1
+    
+
+    def rho_fd(self,h=0.0001):
+        """
+        p = [C(r+h) - C(r-h)]/2h
+        implements a simple flat-shifted yield curve wrapper so the bump feeds through get_zero_rate() cleanly
+        """
+        class ShiftedCurve:
+            def __init__(self, base_curve, shift):
+                self._base = base_curve
+                self._shift = shift
+            
+            def get_zero_rate(self, T):
+                return self._base.get_zero_rate(T) + self._shift
+            
+        up = EuropeanCall(self.s0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, +h)).price()
+        down = EuropeanCall(self.s0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, -h)).price()
+        return (up - down) / (2 * h)/100
+    
+    def all_greeks_fd(self):
+        """
+        Return all the Greeks calculated with finite differences in a dictionary.
+        """
+        return {
+            "delta": self.delta_fd(),
+            "gamma": self.gamma_fd(),
+            "vega": self.vega_fd(),
+            "theta": self.theta_fd(),
+            "rho": self.rho_fd()
+        }
+
+
+
+
 
 class EuropeanPut(Derivative):           
     """
