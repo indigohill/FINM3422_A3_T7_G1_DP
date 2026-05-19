@@ -2,6 +2,20 @@ import numpy as np
 from scipy.stats import norm              
 
 
+    #not sure what to do with this
+def _d1_d2(S0, K, T, sigma, r):
+    """
+    Helper function to calculate d1 and d2 for the Black-Scholes formula.
+    """
+    d1 = (
+        np.log(S0 / K)
+        + (r + 0.5 * sigma ** 2) * T
+    ) / (sigma * np.sqrt(T))
+
+    d2 = d1 - sigma * np.sqrt(T)
+    return d1, d2
+
+
 class Derivative:
     """
     Abstract base class for derivative instruments.
@@ -72,6 +86,138 @@ class EuropeanCall(Derivative):
         )
         return call_price
 
+    def delta(self):
+        """
+        sensitivity of price to spot price (dv/dS)
+        for a call: change = N(d1) (range: 0 to 1)
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(norm.cdf(d1))
+    
+    def gamma(self):
+        """
+        sensitivity of delta to spot price (dV/dS)^2
+        same formula for call and puts: r=N'(d1)/(S*σ*sqrt(T))
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
+    
+    def vega(self):
+        """
+        sensitivity of price to volatility (dV/dσ)
+        same formula for call and puts: v = S*N'(d1)*sqrt(T)
+        > reported per 1% move in volatility, so divide by 100
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(self.S0 * norm.pdf(d1) * np.sqrt(self.T) / 100)
+    
+    def theta(self):
+        """
+        sensitivity of price to time decay (dV/dT)
+        for a call: o = [-S*N'(d1)*σ/(2*sqrt(T))] - r*K*e^(-r*T)*N(d2)
+        reported per day, so divide by 365
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        term1 = -self.S0 * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
+        term2 = -r*self.K*np.exp(-r*self.T)*norm.cdf(d2)
+        return float((term1 + term2) / 365)
+    
+    def rho(self):
+        """
+        sensitivity of price to interest rate (dV/dr)
+        for a call: p = K*T*e^(-r*T)*N(d2)
+        reported per 1% move in rate, so divide by 100
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(self.K * self.T * np.exp(-r * self.T) * norm.cdf(d2) / 100)
+
+    def all_greeks(self):
+        """
+        Return all the Greeks in a dictionary.
+        """
+        return {
+            "delta": self.delta(),
+            "gamma": self.gamma(),
+            "vega": self.vega(),
+            "theta": self.theta(),
+            "rho": self.rho()
+        }
+
+
+    #FINITE
+
+    def delta_fd(self, h=0.01):
+        """
+        change = [C(S+h) - C(S-h)]/2h
+        """
+        up = EuropeanCall(self.S0+h, self.K, self.T, self.sigma, self.yield_curve).price()
+        down = EuropeanCall(self.S0-h, self.K, self.T, self.sigma, self.yield_curve).price()
+        return (up - down) / (2 * h)
+    
+    def gamma_fd(self,h=0.01):
+        """
+        r = [C(S+h) - 2C(S) + C(S-h)]/h^2
+        """
+        up = EuropeanCall(self.S0+h, self.K, self.T, self.sigma, self.yield_curve).price()
+        mid = EuropeanCall(self.S0, self.K, self.T, self.sigma, self.yield_curve).price()
+        down = EuropeanCall(self.S0-h, self.K, self.T, self.sigma, self.yield_curve).price()
+        return (up - 2*mid + down) / (h**2)
+    
+
+    def vega_fd(self,h=0.001):
+        """
+        v = [C(σ+h) - C(σ-h)]/2h
+        """
+        up = EuropeanCall(self.S0, self.K, self.T, self.sigma+h, self.yield_curve).price()
+        down = EuropeanCall(self.S0, self.K, self.T, self.sigma-h, self.yield_curve).price()
+        return (up - down) / (2 * h)/100
+    
+    def theta_fd(self,h=1/365):
+        """
+        o = [C(T+h) - C(T-h)]/2h
+        time moving forward -> T shrinking -> use T-h not T+h
+        """
+        down = EuropeanCall(self.S0, self.K, self.T-h, self.sigma, self.yield_curve).price()
+        return (down - self.price())/1
+    
+
+    def rho_fd(self,h=0.0001):
+        """
+        p = [C(r+h) - C(r-h)]/2h
+        implements a simple flat-shifted yield curve wrapper so the bump feeds through get_zero_rate() cleanly
+        """
+        class ShiftedCurve:
+            def __init__(self, base_curve, shift):
+                self._base = base_curve
+                self._shift = shift
+            
+            def get_zero_rate(self, T):
+                return self._base.get_zero_rate(T) + self._shift
+            
+        up = EuropeanCall(self.S0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, +h)).price()
+        down = EuropeanCall(self.S0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, -h)).price()
+        return (up - down) / (2 * h)/100
+    
+    def all_greeks_fd(self):
+        """
+        Return all the Greeks calculated with finite differences in a dictionary.
+        """
+        return {
+            "delta": self.delta_fd(),
+            "gamma": self.gamma_fd(),
+            "vega": self.vega_fd(),
+            "theta": self.theta_fd(),
+            "rho": self.rho_fd()
+        }
+
+
+
+
 
 class EuropeanPut(Derivative):           
     """
@@ -101,3 +247,144 @@ class EuropeanPut(Derivative):
             - self.S0 * norm.cdf(-d1)
         )
         return put_price
+    
+
+    #closed-form greeks
+
+
+    def delta(self):
+        """
+        for a put:
+        change = N(d1) - 1 (range: -1 to 0)
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(norm.cdf(d1) - 1)
+    
+
+    def gamma(self):
+        """
+        for a put:
+        (same as call)
+        r = N'(d1)/(S*σ*sqrt(T)) -> always positive
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
+    
+    def vega(self):
+        """
+        for a put:
+        (same as call)
+        v = S*N'(d1)*sqrt(T) -> always positive
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(self.S0 * norm.pdf(d1) * np.sqrt(self.T) / 100)
+    
+    def theta(self):
+        """
+        for a put:
+        o = [-S*N'(d1)*σ/(2*sqrt(T))] + r*K*e^(-r*T)*N(-d2)
+        reported per day
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        term1 = -self.S0 * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
+        term2 = +r*self.K*np.exp(-r*self.T)*norm.cdf(-d2)
+        return float((term1 + term2) / 365)
+    
+    def rho(self):
+        """
+        for a put:
+        p = -K*T*e^(-r*T)*N(-d2)
+        reported per 1% move in rate, so divide by 100
+        """
+        r = self.yield_curve.get_zero_rate(self.T)
+        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        return float(-self.K * self.T * np.exp(-r * self.T) * norm.cdf(-d2) / 100)
+    
+    def all_greeks(self):
+        """
+        Return all the Greeks in a dictionary.
+        """
+        return {
+            "delta": self.delta(),
+            "gamma": self.gamma(),
+            "vega": self.vega(),
+            "theta": self.theta(),
+            "rho": self.rho()
+        }
+    
+
+        #FINITE
+
+    def delta_fd(self, h=0.01):
+        """
+        finite difference delta (central difference)
+        """
+        up = EuropeanPut(self.S0+h, self.K, self.T, self.sigma, self.yield_curve).price()
+        down = EuropeanPut(self.S0-h, self.K, self.T, self.sigma, self.yield_curve).price()
+        return (up - down) / (2 * h)
+    
+    def gamma_fd(self,h=0.01):
+        """
+        finite difference gamma (central difference)
+        """
+        up = EuropeanPut(self.S0+h, self.K, self.T, self.sigma, self.yield_curve).price()
+        mid = self.price()
+        down = EuropeanPut(self.S0-h, self.K, self.T, self.sigma, self.yield_curve).price()
+        return (up - 2*mid + down) / (h**2)
+    
+
+    def vega_fd(self,h=0.001):
+        """
+        finite difference vega (central difference)
+        per 1% movement in volatility, so divide by 100
+        """
+        up = EuropeanPut(self.S0, self.K, self.T, self.sigma+h, self.yield_curve).price()
+        down = EuropeanPut(self.S0, self.K, self.T, self.sigma-h, self.yield_curve).price()
+        return (up - down) / (2 * h)/100
+    
+
+    def theta_fd(self,h=1/365):
+        """
+        finite difference theta (forward difference)
+        time moving forward -> T shrinking -> use T-h not T+h
+        per calendar day
+        """
+        down = EuropeanPut(self.S0, self.K, self.T-h, self.sigma, self.yield_curve).price()
+        return (down - self.price())/1
+    
+    def rho_fd(self,h=0.0001):
+        """
+        finite difference rho (central difference via flat rate shift)
+        per 1% movement in rate, so divide by 100
+        """
+        class ShiftedCurve:
+            def __init__(self, base_curve, shift):
+                self._base = base_curve
+                self._shift = shift
+            
+            def get_zero_rate(self, T):
+                return self._base.get_zero_rate(T) + self._shift
+            
+        up = EuropeanPut(self.S0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, +h)).price()
+        down = EuropeanPut(self.S0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, -h)).price()
+        return (up - down) / (2 * h)/100
+    
+    def all_greeks_fd(self):
+        """
+        Return all the Greeks calculated with finite differences in a dictionary.
+        """
+        return {
+            "delta_fd": self.delta_fd(),
+            "gamma_fd": self.gamma_fd(),
+            "vega_fd": self.vega_fd(),
+            "theta_fd": self.theta_fd(),
+            "rho_fd": self.rho_fd()
+        }
+
+
+
+    
