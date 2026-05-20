@@ -14,6 +14,20 @@ def _d1_d2(S0, K, T, sigma, r):
     d2 = d1 - sigma * np.sqrt(T)
     return d1, d2
 
+class ShiftedCurve:
+    """
+    Lightweight wrapper that applies a flat parallel shift to a yield curve.
+
+    Used by finite-difference rho calculations to bump the curve up or down
+    by a small amount without mutating the underlying YieldCurve object.
+    """
+
+    def __init__(self, base_curve, shift):
+        self._base = base_curve
+        self._shift = shift
+
+    def get_zero_rate(self, T):
+        return self._base.get_zero_rate(T) + self._shift
 
 class Derivative:
     """
@@ -183,15 +197,9 @@ class EuropeanCall(Derivative):
     def rho_fd(self,h=0.0001):
         """
         p = [C(r+h) - C(r-h)]/2h
-        implements a simple flat-shifted yield curve wrapper so the bump feeds through get_zero_rate() cleanly
+        Uses ShiftedCurve (module-level) to apply a flat parallel shift
+        to the yield curve so the bump feeds through get_zero_rate() cleanly.
         """
-        class ShiftedCurve:
-            def __init__(self, base_curve, shift):
-                self._base = base_curve
-                self._shift = shift
-            
-            def get_zero_rate(self, T):
-                return self._base.get_zero_rate(T) + self._shift
             
         up = EuropeanCall(self.S0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, +h)).price()
         down = EuropeanCall(self.S0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, -h)).price()
@@ -347,16 +355,10 @@ class EuropeanPut(Derivative):
     
     def rho_fd(self,h=0.0001):
         """
-        finite difference rho (central difference via flat rate shift)
-        per 1% movement in rate, so divide by 100
+        Finite-difference rho (central difference via flat rate shift),
+        reported per 1% movement in rate.
+        Uses ShiftedCurve (module-level) to apply a flat parallel shift.
         """
-        class ShiftedCurve:
-            def __init__(self, base_curve, shift):
-                self._base = base_curve
-                self._shift = shift
-            
-            def get_zero_rate(self, T):
-                return self._base.get_zero_rate(T) + self._shift
             
         up = EuropeanPut(self.S0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, +h)).price()
         down = EuropeanPut(self.S0, self.K, self.T, self.sigma, ShiftedCurve(self.yield_curve, -h)).price()
