@@ -72,12 +72,7 @@ class EuropeanCall(Derivative):
         """
         r = self.yield_curve.get_zero_rate(self.T)
 
-        d1 = (
-            np.log(self.S0 / self.K)
-            + (r + 0.5 * self.sigma ** 2) * self.T
-        ) / (self.sigma * np.sqrt(self.T))
-
-        d2 = d1 - self.sigma * np.sqrt(self.T)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
 
         call_price = (
             self.S0 * norm.cdf(d1)
@@ -234,12 +229,7 @@ class EuropeanPut(Derivative):
         """
         r = self.yield_curve.get_zero_rate(self.T)
 
-        d1 = (
-            np.log(self.S0 / self.K)
-            + (r + 0.5 * self.sigma ** 2) * self.T
-        ) / (self.sigma * np.sqrt(self.T))
-
-        d2 = d1 - self.sigma * np.sqrt(self.T)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
 
         put_price = (                    
             self.K * np.exp(-r * self.T) * norm.cdf(-d2)
