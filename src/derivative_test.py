@@ -2,7 +2,6 @@ import numpy as np
 from scipy.stats import norm              
 
 
-    #not sure what to do with this
 def _d1_d2(S0, K, T, sigma, r):
     """
     Helper function to calculate d1 and d2 for the Black-Scholes formula.
