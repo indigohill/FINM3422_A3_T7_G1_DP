@@ -1,19 +1,88 @@
+"""
+derivatives.py: Option Pricing Module
+-------------------------------------
+Purpose: Pricing engine for multiple types of options.
+
+Provides the following classes and sub-classes:
+- Derivative: Define shared utility methods, but not specific pricing models.
+- EuropeanCall: Black-Scholes closed-form call pricer
+- EuropeanPut: Black-Scholes closed-form put pricer
+- AmericanCall: Binomial tree American call pricer
+- AmericanPut: Binomial tree American put pricer
+- Straddle: Long straddle (call + put) position
+"""
+
 import numpy as np                        
 from scipy.stats import norm              
 
-
+# Helper Functions
+# ---------------------------------------------------
 def _d1_d2(S0, K, T, sigma, r):
     """
-    Helper function to calculate d1 and d2 for the Black-Scholes formula.
+    Description
+    -------------------------------------------------
+    Compute d1 and d2 that are present in the Black-Scholes formula.
+
+    Parameters
+    -------------------------------------------------
+    S0: float
+    - Current Spot Price
+
+    K: float 
+    - Strike Price
+
+    T: float
+    - Time to maturity (years)
+
+    r: float
+    - Continuously compounded risk-free rate (from yieldcurve.py)
+
+    Returns 
+    -------------------------------------------------
+    d1: float
+    d2: float
     """
-    d1 = (
-        np.log(S0 / K)
-        + (r + 0.5 * sigma ** 2) * T
-    ) / (sigma * np.sqrt(T))
+    d1 = (np.log(S0 / K)
+        + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
 
     d2 = d1 - sigma * np.sqrt(T)
     return d1, d2
 
+    def put_call_parity (call, put, tol=1e-4):
+        """
+        Verify that a European call and put satisfy put-call parity:
+        C - P = S0 - K * exp(-r * T)
+
+        Parameters
+        ----------------------------------------------
+        call: EuropeanCall
+        - Priced call option
+        put: EuropeanPut
+        - Priced put with identical parameters
+        tol: float 
+        - Tolerance for the check (default: 1e-4)
+
+        Returns
+        ---------------------------------------------
+        dict - LHS, RHS, difference, pass/fail result
+        """
+
+        assert call.S0 == put.S0, "S0 must match."
+        assert call.K == put.K, "K must match."
+        assert call.T == put.T, "T must match."
+
+        r = call.yield_curve.get_zero_rate (call.T)
+        lhs = call.price () - put.price ()
+        rhs = call.S0 - call.K * np.exp (-r * call.T)
+        diff = abs (lhs - rhs)
+
+        return {
+            "LHS (C - P)" : round (lhs, 6),
+            "RHS (S0 - K*e^{-rT})" : round (rhs, 6),
+            "Difference" : round (diff, 6),
+            "Parity Holds" : diff < tol
+        }
+    
 class ShiftedCurve:
     """
     Lightweight wrapper that applies a flat parallel shift to a yield curve.
