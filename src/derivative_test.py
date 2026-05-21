@@ -39,7 +39,7 @@ class Derivative:
     EuropeanCall or EuropeanPut instead.
     """                                   
 
-    def __init__(self, S0, K, T, sigma, yield_curve):
+    def __init__(self, S0, K, T, sigma, yield_curve, dividend_yield=0.0):
         """
         Initialise common derivative parameters.
 
@@ -56,12 +56,22 @@ class Derivative:
         yield_curve : object
             Yield-curve object that exposes a get_zero_rate(T) method returning
             the continuously-compounded risk-free zero rate for maturity T.
+        dividend_yield : float, optional
+            Continuous dividend yield of the underlying asset (default is 0.0).
         """                               
         self.S0 = S0
         self.K = K
         self.T = T
         self.sigma = sigma
         self.yield_curve = yield_curve
+        self.dividend_yield = float(dividend_yield)
+
+        #input validation
+        if self.S0 <= 0: raise ValueError("S0 must be positive.")
+        if self.K <= 0: raise ValueError("K must be positive.")
+        if self.T <= 0: raise ValueError("T must be positive.")
+        if self.sigma <= 0: raise ValueError("sigma cannot be negative.")
+
 
     def price(self):
         """Sub-classes must implement their own pricing logic."""
@@ -85,8 +95,8 @@ class Derivative:
         delta = [V(S+h) - V(S-h)] / 2h
         """
         cls = type(self)
-        up = cls(self.S0 + h, self.K, self.T, self.sigma, self.yield_curve).price()
-        down = cls(self.S0 - h, self.K, self.T, self.sigma, self.yield_curve).price()
+        up = cls(self.S0 + h, self.K, self.T, self.sigma, self.yield_curve, self.dividend_yield).price()
+        down = cls(self.S0 - h, self.K, self.T, self.sigma, self.yield_curve, self.dividend_yield).price()
         return (up - down) / (2 * h)
 
     def gamma_fd(self, h=0.01):
@@ -95,9 +105,9 @@ class Derivative:
         gamma = [V(S+h) - 2*V(S) + V(S-h)] / h^2
         """
         cls = type(self)
-        up = cls(self.S0 + h, self.K, self.T, self.sigma, self.yield_curve).price()
+        up = cls(self.S0 + h, self.K, self.T, self.sigma, self.yield_curve, self.dividend_yield).price()
         mid = self.price()
-        down = cls(self.S0 - h, self.K, self.T, self.sigma, self.yield_curve).price()
+        down = cls(self.S0 - h, self.K, self.T, self.sigma, self.yield_curve, self.dividend_yield).price()
         return (up - 2 * mid + down) / (h ** 2)
 
     def vega_fd(self, h=0.001):
@@ -106,8 +116,8 @@ class Derivative:
         vega = [V(sigma+h) - V(sigma-h)] / 2h, then divided by 100.
         """
         cls = type(self)
-        up = cls(self.S0, self.K, self.T, self.sigma + h, self.yield_curve).price()
-        down = cls(self.S0, self.K, self.T, self.sigma - h, self.yield_curve).price()
+        up = cls(self.S0, self.K, self.T, self.sigma + h, self.yield_curve, self.dividend_yield).price()
+        down = cls(self.S0, self.K, self.T, self.sigma - h, self.yield_curve, self.dividend_yield).price()
         return (up - down) / (2 * h) / 100
 
     def theta_fd(self, h=1 / 365):
@@ -119,8 +129,8 @@ class Derivative:
         FD Greeks: theta = [V(T-h) - V(T+h)] / (2h * 365).
         """
         cls = type(self)
-        up = cls(self.S0, self.K, self.T + h, self.sigma, self.yield_curve).price()
-        down = cls(self.S0, self.K, self.T - h, self.sigma, self.yield_curve).price()
+        up = cls(self.S0, self.K, self.T + h, self.sigma, self.yield_curve, self.dividend_yield).price()
+        down = cls(self.S0, self.K, self.T - h, self.sigma, self.yield_curve, self.dividend_yield).price()
         return (down - up) / (2 * h) / 365
 
     def rho_fd(self, h=0.0001):
@@ -131,9 +141,9 @@ class Derivative:
         """
         cls = type(self)
         up = cls(self.S0, self.K, self.T, self.sigma,
-                 ShiftedCurve(self.yield_curve, +h)).price()
+                 ShiftedCurve(self.yield_curve, +h), self.dividend_yield).price()
         down = cls(self.S0, self.K, self.T, self.sigma,
-                   ShiftedCurve(self.yield_curve, -h)).price()
+                   ShiftedCurve(self.yield_curve, -h), self.dividend_yield).price()
         return (up - down) / (2 * h) / 100
 
     def all_greeks_fd(self):
@@ -145,6 +155,29 @@ class Derivative:
             "theta": self.theta_fd(),
             "rho": self.rho_fd(),
         }
+
+    @staticmethod
+    def historical_volatility(prices,trading_days=252):
+        """
+        Estimate annualised historical volatility from a price series
+        Computes daily log returns, takes their standard deviation then scale to annual
+
+
+        Parameters:
+        prices : array-like
+            Sequence of historical closing prices
+        trading_days : int
+            Number of trading days in a year (default is 252).
+
+        Returns:
+        float
+            Annualised historical volatility.
+        """
+        prices = np.array(prices, dtype=float)
+        log_returns = np.diff(np.log(prices))
+        daily_vol = np.std(log_returns, ddof=1)
+        annualised_vol = daily_vol * np.sqrt(trading_days)
+        return annualised_vol
 
 class EuropeanCall(Derivative):          
     """
