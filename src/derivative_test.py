@@ -362,14 +362,15 @@ class EuropeanPut(Derivative):
             Theoretical put price.
         """
         r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
 
-        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
 
         put_price = (                    
             self.K * np.exp(-r * self.T) * norm.cdf(-d2)
-            - self.S0 * norm.cdf(-d1)
+            - self.S0 * np.exp(-q * self.T) * norm.cdf(-d1)
         )
-        return put_price
+        return float(put_price)
     
 
     #closed-form greeks
@@ -381,8 +382,9 @@ class EuropeanPut(Derivative):
         change = N(d1) - 1 (range: -1 to 0)
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(norm.cdf(d1) - 1)
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
+        return float(np.exp(-q*self.T) * (norm.cdf(d1) - 1))
     
 
     def gamma(self):
@@ -392,8 +394,9 @@ class EuropeanPut(Derivative):
         r = N'(d1)/(S*σ*sqrt(T)) -> always positive
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
+        return float(np.exp(-q*self.T)*norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
     
     def vega(self):
         """
@@ -402,8 +405,9 @@ class EuropeanPut(Derivative):
         v = S*N'(d1)*sqrt(T) -> always positive
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(self.S0 * norm.pdf(d1) * np.sqrt(self.T) / 100)
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
+        return float(self.S0 * np.exp(-q*self.T)*norm.pdf(d1) * np.sqrt(self.T) / 100)
     
     def theta(self):
         """
@@ -411,11 +415,15 @@ class EuropeanPut(Derivative):
         o = [-S*N'(d1)*σ/(2*sqrt(T))] + r*K*e^(-r*T)*N(-d2)
         reported per day
         """
-        r = self.yield_curve.get_zero_rate(self.T)
-        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        term1 = -self.S0 * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
-        term2 = +r*self.K*np.exp(-r*self.T)*norm.cdf(-d2)
-        return float((term1 + term2) / 365)
+        r       = self.yield_curve.get_zero_rate(self.T)
+        q       = self.dividend_yield
+        d1, d2  = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
+ 
+        term1   = -(self.S0 * np.exp(-q * self.T) * norm.pdf(d1) * self.sigma) / (2 * np.sqrt(self.T))
+        term2   = +r * self.K * np.exp(-r * self.T) * norm.cdf(-d2)
+        term3   = -q * self.S0 * np.exp(-q * self.T) * norm.cdf(-d1)
+ 
+        return float((term1 + term2 + term3) / 365)
     
     def rho(self):
         """
@@ -423,9 +431,11 @@ class EuropeanPut(Derivative):
         p = -K*T*e^(-r*T)*N(-d2)
         reported per 1% move in rate, so divide by 100
         """
-        r = self.yield_curve.get_zero_rate(self.T)
-        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        r      = self.yield_curve.get_zero_rate(self.T)
+        q      = self.dividend_yield
+        _, d2  = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
         return float(-self.K * self.T * np.exp(-r * self.T) * norm.cdf(-d2) / 100)
+    
     
     def all_greeks(self):
         """
@@ -437,6 +447,45 @@ class EuropeanPut(Derivative):
             "vega": self.vega(),
             "theta": self.theta(),
             "rho": self.rho()
+        }
+    
+
+    #Monte Carlo Pricing
+
+    def price_mc(self, n_sims=100_000, seed=42):
+        """
+        Price the put via Monte Carlo using GBM with antithetic variates.
+ 
+        """
+        np.random.seed(seed)
+        r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
+ 
+       
+        half = n_sims // 2
+        Z    = np.random.standard_normal(half)
+        Z    = np.concatenate([Z, -Z])
+ 
+        ST = self.S0 * np.exp(
+            (r - q - 0.5 * self.sigma ** 2) * self.T
+            + self.sigma * np.sqrt(self.T) * Z
+        )
+ 
+        
+        payoffs = np.maximum(self.K - ST, 0)
+        return float(np.exp(-r * self.T) * np.mean(payoffs))
+ 
+    def mc_vs_bs(self, n_sims=100_000, seed=42):
+        """
+        Compare the Monte Carlo price to the Black-Scholes price.
+ 
+        """
+        bs = self.price()
+        mc = self.price_mc(n_sims=n_sims, seed=seed)
+        return {
+            "BS Price ($)":    round(bs, 4),
+            "MC Price ($)":    round(mc, 4),
+            "Difference ($)":  round(abs(bs - mc), 4),
         }
     
 
