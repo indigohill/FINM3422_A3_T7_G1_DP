@@ -282,6 +282,71 @@ class EuropeanCall(Derivative):
         }
 
 
+
+    # Monte Carlo Pricing
+
+    def price_mc(self, n_sims=100_000, seed = 42):
+        """
+        Price the call via Monte Carlo simulation using Geometric Brownian Motion.
+ 
+        Uses antithetic variates to reduce simulation variance:
+        for every random draw Z, its mirror -Z is also used.
+        This gives more accurate results with the same number of paths.
+
+        Steps:
+         1. Draw n_sims/2 random numbers Z, pair with -Z (antithetic variates).
+        2. Simulate final stock price:
+               S_T = S0 * exp((r - q - sigma^2/2)*T + sigma*sqrt(T)*Z)
+        3. Calculate call payoff: max(S_T - K, 0).
+        4. Average payoffs and discount: price = e^(-rT) * mean(payoffs).
+ 
+        Parameters:       
+        n_sims : int
+            Number of simulated paths (must be even).
+        seed : int
+            Random seed for reproducibility.
+ 
+        Returns
+        float
+            Monte Carlo estimate of the call price.
+        """
+
+        np.random.seed(seed)
+        r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
+
+        #antithetic variates: pair each Z with -Z to reduce variance
+        half = n_sims // 2
+        Z = np.random.standard_normal(half)
+        Z = np.concatenate([Z, -Z])  # antithetic pairing
+
+        #simulate final stock prices under risk-neutral GBM
+        ST = self.S0 * np.exp((r - q - 0.5 * self.sigma ** 2) * self.T + self.sigma * np.sqrt(self.T) * Z)
+
+        #call payoff: max(ST - K, 0)
+        payoffs = np.maximum(ST - self.K, 0)
+        return float(np.exp(-r * self.T) * np.mean(payoffs))
+    
+    def mc_vs_bs(self, n_sims=100_000, seed=42):
+        """
+        Compare Monte Carlo price to Black-Scholes price and return the difference.
+        Useful as a validation step since they should be very close
+        Returns
+        float
+            Difference between Monte Carlo price and Black-Scholes price.
+        """
+        bs = self.price()
+        mc = self.price_mc(n_sims=n_sims, seed=seed)
+        return {
+            "BS Price ($)": round(bs, 4),
+            "MC Price ($)": round(mc, 4),
+            "Difference ($)": round(abs(mc - bs), 4)
+        }
+
+
+
+
+
 class EuropeanPut(Derivative):           
     """
     European put option priced with the closed-form Black-Scholes formula.
