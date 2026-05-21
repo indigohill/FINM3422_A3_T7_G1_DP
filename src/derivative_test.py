@@ -39,7 +39,7 @@ class Derivative:
     EuropeanCall or EuropeanPut instead.
     """                                   
 
-    def __init__(self, S0, K, T, sigma, yield_curve):
+    def __init__(self, S0, K, T, sigma, yield_curve, dividend_yield=0.0):
         """
         Initialise common derivative parameters.
 
@@ -56,12 +56,22 @@ class Derivative:
         yield_curve : object
             Yield-curve object that exposes a get_zero_rate(T) method returning
             the continuously-compounded risk-free zero rate for maturity T.
+        dividend_yield : float, optional
+            Continuous dividend yield of the underlying asset (default is 0.0).
         """                               
         self.S0 = S0
         self.K = K
         self.T = T
         self.sigma = sigma
         self.yield_curve = yield_curve
+        self.dividend_yield = float(dividend_yield)
+
+        #input validation
+        if self.S0 <= 0: raise ValueError("S0 must be positive.")
+        if self.K <= 0: raise ValueError("K must be positive.")
+        if self.T <= 0: raise ValueError("T must be positive.")
+        if self.sigma <= 0: raise ValueError("sigma cannot be negative.")
+
 
     def price(self):
         """Sub-classes must implement their own pricing logic."""
@@ -85,8 +95,8 @@ class Derivative:
         delta = [V(S+h) - V(S-h)] / 2h
         """
         cls = type(self)
-        up = cls(self.S0 + h, self.K, self.T, self.sigma, self.yield_curve).price()
-        down = cls(self.S0 - h, self.K, self.T, self.sigma, self.yield_curve).price()
+        up = cls(self.S0 + h, self.K, self.T, self.sigma, self.yield_curve, self.dividend_yield).price()
+        down = cls(self.S0 - h, self.K, self.T, self.sigma, self.yield_curve, self.dividend_yield).price()
         return (up - down) / (2 * h)
 
     def gamma_fd(self, h=0.01):
@@ -95,9 +105,9 @@ class Derivative:
         gamma = [V(S+h) - 2*V(S) + V(S-h)] / h^2
         """
         cls = type(self)
-        up = cls(self.S0 + h, self.K, self.T, self.sigma, self.yield_curve).price()
+        up = cls(self.S0 + h, self.K, self.T, self.sigma, self.yield_curve, self.dividend_yield).price()
         mid = self.price()
-        down = cls(self.S0 - h, self.K, self.T, self.sigma, self.yield_curve).price()
+        down = cls(self.S0 - h, self.K, self.T, self.sigma, self.yield_curve, self.dividend_yield).price()
         return (up - 2 * mid + down) / (h ** 2)
 
     def vega_fd(self, h=0.001):
@@ -106,8 +116,8 @@ class Derivative:
         vega = [V(sigma+h) - V(sigma-h)] / 2h, then divided by 100.
         """
         cls = type(self)
-        up = cls(self.S0, self.K, self.T, self.sigma + h, self.yield_curve).price()
-        down = cls(self.S0, self.K, self.T, self.sigma - h, self.yield_curve).price()
+        up = cls(self.S0, self.K, self.T, self.sigma + h, self.yield_curve, self.dividend_yield).price()
+        down = cls(self.S0, self.K, self.T, self.sigma - h, self.yield_curve, self.dividend_yield).price()
         return (up - down) / (2 * h) / 100
 
     def theta_fd(self, h=1 / 365):
@@ -119,8 +129,8 @@ class Derivative:
         FD Greeks: theta = [V(T-h) - V(T+h)] / (2h * 365).
         """
         cls = type(self)
-        up = cls(self.S0, self.K, self.T + h, self.sigma, self.yield_curve).price()
-        down = cls(self.S0, self.K, self.T - h, self.sigma, self.yield_curve).price()
+        up = cls(self.S0, self.K, self.T + h, self.sigma, self.yield_curve, self.dividend_yield).price()
+        down = cls(self.S0, self.K, self.T - h, self.sigma, self.yield_curve, self.dividend_yield).price()
         return (down - up) / (2 * h) / 365
 
     def rho_fd(self, h=0.0001):
@@ -131,9 +141,9 @@ class Derivative:
         """
         cls = type(self)
         up = cls(self.S0, self.K, self.T, self.sigma,
-                 ShiftedCurve(self.yield_curve, +h)).price()
+                 ShiftedCurve(self.yield_curve, +h), self.dividend_yield).price()
         down = cls(self.S0, self.K, self.T, self.sigma,
-                   ShiftedCurve(self.yield_curve, -h)).price()
+                   ShiftedCurve(self.yield_curve, -h), self.dividend_yield).price()
         return (up - down) / (2 * h) / 100
 
     def all_greeks_fd(self):
@@ -146,9 +156,37 @@ class Derivative:
             "rho": self.rho_fd(),
         }
 
+    @staticmethod
+    def historical_volatility(prices,trading_days=252):
+        """
+        Estimate annualised historical volatility from a price series
+        Computes daily log returns, takes their standard deviation then scale to annual
+
+
+        Parameters:
+        prices : array-like
+            Sequence of historical closing prices
+        trading_days : int
+            Number of trading days in a year (default is 252).
+
+        Returns:
+        float
+            Annualised historical volatility.
+        """
+        prices = np.array(prices, dtype=float)
+        log_returns = np.diff(np.log(prices))
+        daily_vol = np.std(log_returns, ddof=1)
+        annualised_vol = daily_vol * np.sqrt(trading_days)
+        return annualised_vol
+
+
+
 class EuropeanCall(Derivative):          
     """
     European call option priced with the closed-form Black-Scholes formula.
+    Supports continuous dividend yield via the Merton (1973) extension:
+        C = S * e^(-qT) * N(d1) - K * e^(-rT) * N(d2)
+    where q is the continuous dividend yield.
     """
 
     def price(self):
@@ -161,14 +199,15 @@ class EuropeanCall(Derivative):
             Theoretical call price.
         """
         r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
 
-        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
 
         call_price = (
-            self.S0 * norm.cdf(d1)
+            self.S0 * np.exp(-q*self.T) * norm.cdf(d1)
             - self.K * np.exp(-r * self.T) * norm.cdf(d2)
         )
-        return call_price
+        return float(call_price)
 
     def delta(self):
         """
@@ -176,8 +215,9 @@ class EuropeanCall(Derivative):
         for a call: change = N(d1) (range: 0 to 1)
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(norm.cdf(d1))
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
+        return float(np.exp(-q*self.T)*norm.cdf(d1))
     
     def gamma(self):
         """
@@ -185,8 +225,9 @@ class EuropeanCall(Derivative):
         same formula for call and puts: r=N'(d1)/(S*σ*sqrt(T))
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
+        return float(np.exp(-q*self.T)*norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
     
     def vega(self):
         """
@@ -195,8 +236,9 @@ class EuropeanCall(Derivative):
         > reported per 1% move in volatility, so divide by 100
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(self.S0 * norm.pdf(d1) * np.sqrt(self.T) / 100)
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
+        return float(self.S0 *np.exp(-q*self.T)* norm.pdf(d1) * np.sqrt(self.T) / 100)
     
     def theta(self):
         """
@@ -205,11 +247,17 @@ class EuropeanCall(Derivative):
         reported per day, so divide by 365
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        term1 = -self.S0 * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
+        q = self.dividend_yield
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
+        #time decay: always negative
+        term1 = -self.S0 * np.exp(-q*self.T) * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
+        #interest rate effect; negative for calls
         term2 = -r*self.K*np.exp(-r*self.T)*norm.cdf(d2)
-        return float((term1 + term2) / 365)
-    
+        #dividend effect: positive for calls, as dividends reduce the underlying price
+        term3 = q*self.S0*np.exp(-q*self.T)*norm.cdf(d1)
+        
+        return float((term1 + term2 + term3) / 365)
+
     def rho(self):
         """
         sensitivity of price to interest rate (dV/dr)
@@ -217,7 +265,8 @@ class EuropeanCall(Derivative):
         reported per 1% move in rate, so divide by 100
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        q = self.dividend_yield
+        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
         return float(self.K * self.T * np.exp(-r * self.T) * norm.cdf(d2) / 100)
 
     def all_greeks(self):
@@ -231,6 +280,71 @@ class EuropeanCall(Derivative):
             "theta": self.theta(),
             "rho": self.rho()
         }
+
+
+
+    # Monte Carlo Pricing
+
+    def price_mc(self, n_sims=100_000, seed = 42):
+        """
+        Price the call via Monte Carlo simulation using Geometric Brownian Motion.
+ 
+        Uses antithetic variates to reduce simulation variance:
+        for every random draw Z, its mirror -Z is also used.
+        This gives more accurate results with the same number of paths.
+
+        Steps:
+         1. Draw n_sims/2 random numbers Z, pair with -Z (antithetic variates).
+        2. Simulate final stock price:
+               S_T = S0 * exp((r - q - sigma^2/2)*T + sigma*sqrt(T)*Z)
+        3. Calculate call payoff: max(S_T - K, 0).
+        4. Average payoffs and discount: price = e^(-rT) * mean(payoffs).
+ 
+        Parameters:       
+        n_sims : int
+            Number of simulated paths (must be even).
+        seed : int
+            Random seed for reproducibility.
+ 
+        Returns
+        float
+            Monte Carlo estimate of the call price.
+        """
+
+        np.random.seed(seed)
+        r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
+
+        #antithetic variates: pair each Z with -Z to reduce variance
+        half = n_sims // 2
+        Z = np.random.standard_normal(half)
+        Z = np.concatenate([Z, -Z])  # antithetic pairing
+
+        #simulate final stock prices under risk-neutral GBM
+        ST = self.S0 * np.exp((r - q - 0.5 * self.sigma ** 2) * self.T + self.sigma * np.sqrt(self.T) * Z)
+
+        #call payoff: max(ST - K, 0)
+        payoffs = np.maximum(ST - self.K, 0)
+        return float(np.exp(-r * self.T) * np.mean(payoffs))
+    
+    def mc_vs_bs(self, n_sims=100_000, seed=42):
+        """
+        Compare Monte Carlo price to Black-Scholes price and return the difference.
+        Useful as a validation step since they should be very close
+        Returns
+        float
+            Difference between Monte Carlo price and Black-Scholes price.
+        """
+        bs = self.price()
+        mc = self.price_mc(n_sims=n_sims, seed=seed)
+        return {
+            "BS Price ($)": round(bs, 4),
+            "MC Price ($)": round(mc, 4),
+            "Difference ($)": round(abs(mc - bs), 4)
+        }
+
+
+
 
 
 class EuropeanPut(Derivative):           
@@ -248,14 +362,15 @@ class EuropeanPut(Derivative):
             Theoretical put price.
         """
         r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
 
-        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
 
         put_price = (                    
             self.K * np.exp(-r * self.T) * norm.cdf(-d2)
-            - self.S0 * norm.cdf(-d1)
+            - self.S0 * np.exp(-q * self.T) * norm.cdf(-d1)
         )
-        return put_price
+        return float(put_price)
     
 
     #closed-form greeks
@@ -267,8 +382,9 @@ class EuropeanPut(Derivative):
         change = N(d1) - 1 (range: -1 to 0)
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(norm.cdf(d1) - 1)
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
+        return float(np.exp(-q*self.T) * (norm.cdf(d1) - 1))
     
 
     def gamma(self):
@@ -278,8 +394,9 @@ class EuropeanPut(Derivative):
         r = N'(d1)/(S*σ*sqrt(T)) -> always positive
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
+        return float(np.exp(-q*self.T)*norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
     
     def vega(self):
         """
@@ -288,8 +405,9 @@ class EuropeanPut(Derivative):
         v = S*N'(d1)*sqrt(T) -> always positive
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(self.S0 * norm.pdf(d1) * np.sqrt(self.T) / 100)
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
+        return float(self.S0 * np.exp(-q*self.T)*norm.pdf(d1) * np.sqrt(self.T) / 100)
     
     def theta(self):
         """
@@ -297,11 +415,15 @@ class EuropeanPut(Derivative):
         o = [-S*N'(d1)*σ/(2*sqrt(T))] + r*K*e^(-r*T)*N(-d2)
         reported per day
         """
-        r = self.yield_curve.get_zero_rate(self.T)
-        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        term1 = -self.S0 * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
-        term2 = +r*self.K*np.exp(-r*self.T)*norm.cdf(-d2)
-        return float((term1 + term2) / 365)
+        r       = self.yield_curve.get_zero_rate(self.T)
+        q       = self.dividend_yield
+        d1, d2  = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
+ 
+        term1   = -(self.S0 * np.exp(-q * self.T) * norm.pdf(d1) * self.sigma) / (2 * np.sqrt(self.T))
+        term2   = +r * self.K * np.exp(-r * self.T) * norm.cdf(-d2)
+        term3   = -q * self.S0 * np.exp(-q * self.T) * norm.cdf(-d1)
+ 
+        return float((term1 + term2 + term3) / 365)
     
     def rho(self):
         """
@@ -309,9 +431,11 @@ class EuropeanPut(Derivative):
         p = -K*T*e^(-r*T)*N(-d2)
         reported per 1% move in rate, so divide by 100
         """
-        r = self.yield_curve.get_zero_rate(self.T)
-        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        r      = self.yield_curve.get_zero_rate(self.T)
+        q      = self.dividend_yield
+        _, d2  = _d1_d2(self.S0, self.K, self.T, self.sigma, r - q)
         return float(-self.K * self.T * np.exp(-r * self.T) * norm.cdf(-d2) / 100)
+    
     
     def all_greeks(self):
         """
@@ -323,6 +447,45 @@ class EuropeanPut(Derivative):
             "vega": self.vega(),
             "theta": self.theta(),
             "rho": self.rho()
+        }
+    
+
+    #Monte Carlo Pricing
+
+    def price_mc(self, n_sims=100_000, seed=42):
+        """
+        Price the put via Monte Carlo using GBM with antithetic variates.
+ 
+        """
+        np.random.seed(seed)
+        r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
+ 
+       
+        half = n_sims // 2
+        Z    = np.random.standard_normal(half)
+        Z    = np.concatenate([Z, -Z])
+ 
+        ST = self.S0 * np.exp(
+            (r - q - 0.5 * self.sigma ** 2) * self.T
+            + self.sigma * np.sqrt(self.T) * Z
+        )
+ 
+        
+        payoffs = np.maximum(self.K - ST, 0)
+        return float(np.exp(-r * self.T) * np.mean(payoffs))
+ 
+    def mc_vs_bs(self, n_sims=100_000, seed=42):
+        """
+        Compare the Monte Carlo price to the Black-Scholes price.
+ 
+        """
+        bs = self.price()
+        mc = self.price_mc(n_sims=n_sims, seed=seed)
+        return {
+            "BS Price ($)":    round(bs, 4),
+            "MC Price ($)":    round(mc, 4),
+            "Difference ($)":  round(abs(bs - mc), 4),
         }
     
 
