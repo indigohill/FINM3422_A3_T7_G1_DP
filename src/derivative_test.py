@@ -179,9 +179,14 @@ class Derivative:
         annualised_vol = daily_vol * np.sqrt(trading_days)
         return annualised_vol
 
+
+
 class EuropeanCall(Derivative):          
     """
     European call option priced with the closed-form Black-Scholes formula.
+    Supports continuous dividend yield via the Merton (1973) extension:
+        C = S * e^(-qT) * N(d1) - K * e^(-rT) * N(d2)
+    where q is the continuous dividend yield.
     """
 
     def price(self):
@@ -194,14 +199,15 @@ class EuropeanCall(Derivative):
             Theoretical call price.
         """
         r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
 
-        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
 
         call_price = (
-            self.S0 * norm.cdf(d1)
+            self.S0 * np.exp(-q*self.T) * norm.cdf(d1)
             - self.K * np.exp(-r * self.T) * norm.cdf(d2)
         )
-        return call_price
+        return float(call_price)
 
     def delta(self):
         """
@@ -209,8 +215,9 @@ class EuropeanCall(Derivative):
         for a call: change = N(d1) (range: 0 to 1)
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(norm.cdf(d1))
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
+        return float(np.exp(-q*self.T)*norm.cdf(d1))
     
     def gamma(self):
         """
@@ -218,8 +225,9 @@ class EuropeanCall(Derivative):
         same formula for call and puts: r=N'(d1)/(S*σ*sqrt(T))
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
+        return float(np.exp(-q*self.T)*norm.pdf(d1) / (self.S0 * self.sigma * np.sqrt(self.T)))
     
     def vega(self):
         """
@@ -228,8 +236,9 @@ class EuropeanCall(Derivative):
         > reported per 1% move in volatility, so divide by 100
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        return float(self.S0 * norm.pdf(d1) * np.sqrt(self.T) / 100)
+        q = self.dividend_yield
+        d1, _ = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
+        return float(self.S0 *np.exp(-q*self.T)* norm.pdf(d1) * np.sqrt(self.T) / 100)
     
     def theta(self):
         """
@@ -238,11 +247,17 @@ class EuropeanCall(Derivative):
         reported per day, so divide by 365
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
-        term1 = -self.S0 * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
+        q = self.dividend_yield
+        d1, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
+        #time decay: always negative
+        term1 = -self.S0 * np.exp(-q*self.T) * norm.pdf(d1) * self.sigma / (2 * np.sqrt(self.T))
+        #interest rate effect; negative for calls
         term2 = -r*self.K*np.exp(-r*self.T)*norm.cdf(d2)
-        return float((term1 + term2) / 365)
-    
+        #dividend effect: positive for calls, as dividends reduce the underlying price
+        term3 = q*self.S0*np.exp(-q*self.T)*norm.cdf(d1)
+        
+        return float((term1 + term2 + term3) / 365)
+
     def rho(self):
         """
         sensitivity of price to interest rate (dV/dr)
@@ -250,7 +265,8 @@ class EuropeanCall(Derivative):
         reported per 1% move in rate, so divide by 100
         """
         r = self.yield_curve.get_zero_rate(self.T)
-        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r)
+        q = self.dividend_yield
+        _, d2 = _d1_d2(self.S0, self.K, self.T, self.sigma, r-q)
         return float(self.K * self.T * np.exp(-r * self.T) * norm.cdf(d2) / 100)
 
     def all_greeks(self):
