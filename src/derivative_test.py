@@ -488,6 +488,233 @@ class EuropeanPut(Derivative):
             "Difference ($)":  round(abs(bs - mc), 4),
         }
     
+# ======================================================================
+# Binomial (Cox-Ross-Rubinstein) pricers — European and American
+# ======================================================================
+# These subclasses price European- and American-style options using a
+# recombining CRR binomial tree. They share the same Derivative base class
+# as the Black-Scholes pricers, which means Portfolio.value() and
+# Portfolio.delta() work polymorphically on all pricer types without any
+# code change.
+#
+# FD Greeks inherited from the base class work correctly via type(self).
+#
+# NOTE on gamma_fd: the inherited finite-difference gamma is noise-dominated
+# on binomial trees due to discretisation. The tree's price function is
+# piecewise smooth with small jumps as nodes cross the strike, which the
+# second-derivative finite difference amplifies. Use the closed-form gamma
+# from EuropeanCall / EuropeanPut for risk metrics. Binomial is used here
+# for pricing cross-validation, not for production gamma.
+#
+# Reference: Cox, Ross, Rubinstein (1979); Hull, Ch. 13.
+# ======================================================================
+
+
+def _crr_tree_price_european(S0, K, T, sigma, r, q, N, payoff_fn):
+    """
+    Cox-Ross-Rubinstein binomial tree pricer for European-style options.
+
+    Builds a recombining tree of N steps, computes terminal payoffs at
+    expiry, then discounts backward through the tree using the risk-neutral
+    probability. Vectorised across nodes at each time step for efficiency.
+
+    Supports continuous dividend yield via Merton's drift adjustment:
+    the risk-neutral probability uses (r - q) as the drift while
+    discounting still uses r.
+
+    Parameters
+    ----------
+    S0 : float
+        Current spot price of the underlying.
+    K : float
+        Strike price.
+    T : float
+        Time to maturity in years.
+    sigma : float
+        Volatility of the underlying (annualised, as a decimal).
+    r : float
+        Risk-free rate, continuously compounded, assumed flat over [0, T].
+    q : float
+        Continuous dividend yield.
+    N : int
+        Number of time steps in the tree. Error decays as O(1/N).
+    payoff_fn : callable
+        Intrinsic-value function payoff_fn(S, K) called at expiry.
+
+    Returns
+    -------
+    float
+        Present value of the option.
+    """
+    dt = T / N
+    u = np.exp(sigma * np.sqrt(dt))
+    d = 1.0 / u
+    disc = np.exp(-r * dt)
+    p = (np.exp((r - q) * dt) - d) / (u - d)
+
+    j = np.arange(N + 1)
+    S_terminal = S0 * (u ** j) * (d ** (N - j))
+    V = payoff_fn(S_terminal, K)
+
+    # European rollback: pure discounted expectation, no early exercise
+    for i in range(N, 0, -1):
+        V = disc * (p * V[1:i+1] + (1 - p) * V[0:i])
+
+    return float(V[0])
+
+
+def _crr_tree_price_american(S0, K, T, sigma, r, q, N, payoff_fn):
+    """
+    Cox-Ross-Rubinstein binomial tree pricer for American-style options.
+
+    Identical to the European tree pricer except for the rollback step,
+    which takes max(continuation_value, intrinsic_value) at each node.
+    This embeds the holder's right to exercise early.
+
+    Key theoretical results validated by this implementation:
+    - American calls on non-dividend stocks equal European calls (no
+      early-exercise premium); confirms Merton (1973).
+    - American calls on dividend-paying stocks can exceed European calls,
+      with the premium growing with dividend yield.
+    - American puts are always >= European puts; the premium grows as
+      the put moves deeper in-the-money.
+
+    Reference: Hull, Ch. 13.
+
+    Parameters
+    ----------
+    Same as _crr_tree_price_european.
+
+    Returns
+    -------
+    float
+        Present value of the American option.
+    """
+    dt = T / N
+    u = np.exp(sigma * np.sqrt(dt))
+    d = 1.0 / u
+    disc = np.exp(-r * dt)
+    p = (np.exp((r - q) * dt) - d) / (u - d)
+
+    j = np.arange(N + 1)
+    S_terminal = S0 * (u ** j) * (d ** (N - j))
+    V = payoff_fn(S_terminal, K)
+
+    for i in range(N, 0, -1):
+        # Continuation value: discounted expected value of holding
+        continuation = disc * (p * V[1:i+1] + (1 - p) * V[0:i])
+
+        # Spot prices at step i-1 (after rollback)
+        j_step = np.arange(i)
+        S_step = S0 * (u ** j_step) * (d ** (i - 1 - j_step))
+        intrinsic = payoff_fn(S_step, K)
+
+        # American optionality: max of holding vs exercising now
+        V = np.maximum(continuation, intrinsic)
+
+    return float(V[0])
+
+
+class BinomialEuropeanCall(Derivative):
+    """
+    European call option priced via the Cox-Ross-Rubinstein binomial tree.
+
+    Converges to the Black-Scholes price as N -> infinity with error of
+    order O(1/N). Supports continuous dividend yield via Merton drift.
+    """
+
+    DEFAULT_N = 500
+
+    def __init__(self, S0, K, T, sigma, yield_curve, dividend_yield=0.0, N=None):
+        super().__init__(S0, K, T, sigma, yield_curve, dividend_yield)
+        self.N = N if N is not None else self.DEFAULT_N
+
+    def price(self):
+        r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
+        return _crr_tree_price_european(
+            self.S0, self.K, self.T, self.sigma, r, q, self.N,
+            payoff_fn=lambda S, K: np.maximum(S - K, 0.0)
+        )
+
+
+class BinomialEuropeanPut(Derivative):
+    """
+    European put option priced via the Cox-Ross-Rubinstein binomial tree.
+
+    Converges to the Black-Scholes price as N -> infinity. Put-call parity
+    holds exactly in the tree (to machine precision), making this a strong
+    cross-check on the binomial pricing logic.
+    """
+
+    DEFAULT_N = 500
+
+    def __init__(self, S0, K, T, sigma, yield_curve, dividend_yield=0.0, N=None):
+        super().__init__(S0, K, T, sigma, yield_curve, dividend_yield)
+        self.N = N if N is not None else self.DEFAULT_N
+
+    def price(self):
+        r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
+        return _crr_tree_price_european(
+            self.S0, self.K, self.T, self.sigma, r, q, self.N,
+            payoff_fn=lambda S, K: np.maximum(K - S, 0.0)
+        )
+
+
+class AmericanCall(Derivative):
+    """
+    American call option priced via the Cox-Ross-Rubinstein binomial tree
+    with early-exercise checking at each node.
+
+    Behaviour:
+    - For non-dividend-paying underlyings (q=0), price equals the European
+      call (Merton's theorem: never optimal to exercise early without
+      dividends).
+    - For dividend-paying underlyings (q > 0), price may exceed European,
+      reflecting the right to exercise just before a dividend.
+    """
+
+    DEFAULT_N = 500
+
+    def __init__(self, S0, K, T, sigma, yield_curve, dividend_yield=0.0, N=None):
+        super().__init__(S0, K, T, sigma, yield_curve, dividend_yield)
+        self.N = N if N is not None else self.DEFAULT_N
+
+    def price(self):
+        r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
+        return _crr_tree_price_american(
+            self.S0, self.K, self.T, self.sigma, r, q, self.N,
+            payoff_fn=lambda S, K: np.maximum(S - K, 0.0)
+        )
+
+
+class AmericanPut(Derivative):
+    """
+    American put option priced via the Cox-Ross-Rubinstein binomial tree
+    with early-exercise checking at each node.
+
+    Always greater than or equal to the equivalent European put. The
+    premium reflects the value of the right to exercise early, which can
+    be optimal when the put is deeply in-the-money — the present value of
+    receiving K now (which earns interest) exceeds the option value of
+    waiting.
+    """
+
+    DEFAULT_N = 500
+
+    def __init__(self, S0, K, T, sigma, yield_curve, dividend_yield=0.0, N=None):
+        super().__init__(S0, K, T, sigma, yield_curve, dividend_yield)
+        self.N = N if N is not None else self.DEFAULT_N
+
+    def price(self):
+        r = self.yield_curve.get_zero_rate(self.T)
+        q = self.dividend_yield
+        return _crr_tree_price_american(
+            self.S0, self.K, self.T, self.sigma, r, q, self.N,
+            payoff_fn=lambda S, K: np.maximum(K - S, 0.0)
+        )
 
 
     
