@@ -260,3 +260,32 @@ class Portfolio:
             horizon_days    = horizon_days,
             portfolio_value = self.value (),
         )
+    
+
+
+    def expected_shortfall (self, alpha=0.95, horizon_days=1):
+        """
+        Expected shortfall (CVaR) is the average loss in the worst (1-alpha)% of cases.
+        Provides a more complete picture of tail risk than VaR.
+        It helps calculate the expected loss given that loss exceeds VaR
+
+        Parameters
+        ----------
+        alpha : float
+            Confidence level.
+        horizon_days : int
+            Holding period in days.
+
+        Returns
+        -------
+        float
+            Expected shortfall in dollars (positive).
+        """
+        
+        returns = self._get_returns ()
+        return expected_shortfall (
+            returns,
+            alpha           = alpha,
+            horizon_days    = horizon_days,
+            portfolio_value = self.value (),
+        )
