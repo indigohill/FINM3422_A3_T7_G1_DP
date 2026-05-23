@@ -617,10 +617,10 @@ class _BinomialBase(Derivative):
         _payoff  : which payoff function to use (call or put).
  
     price() is then fully shared — each binomial class is just two lines.
-    DEFAULT_N = 500 gives error ≈ 0.2% vs Black-Scholes at reasonable speed.
+    DEFAULT_N = 2000 gives error
     """
  
-    DEFAULT_N = 500     # Default number of tree steps.
+    DEFAULT_N = 2000     # Default number of tree steps.
     _tree_fn  = None    # Set by each subclass: European or American tree function.
     _payoff   = None    # Set by each subclass: call or put payoff function.
  
