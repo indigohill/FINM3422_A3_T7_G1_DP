@@ -405,3 +405,90 @@ class Portfolio:
         return pd.DataFrame (rows).set_index ("Metric")
     
 
+
+    # Distribution Statistics
+
+    def return_distribution_stats (self):
+       """Compute descriptive statistics of the underlying return distribution.
+ 
+        Includes kurtosis and skewness to characterise leptokurtosis and
+        asymmetry — key limitations of the parametric VaR normality assumption.
+ 
+        Returns
+        -------
+        dict
+            Mean, std, skewness, kurtosis, excess kurtosis, leptokurtic flag.
+        """
+       
+       returns = self._get_returns ()
+       return {
+            "Mean (daily)"    : round (float (returns.mean ()), 6),
+            "Std Dev (daily)" : round (float (returns.std ()), 6),
+            "Skewness"        : round (float (returns.skew ()), 4),
+            "Kurtosis"        : round (float (returns.kurtosis () + 3), 4),  # total kurtosis
+            "Excess Kurtosis" : round (float (returns.kurtosis ()), 4),       # vs normal (=0)
+            "Is Leptokurtic"  : bool (returns.kurtosis () > 0),
+        }
+    
+
+    # Scenario Analysis
+
+    def scenario_analysis (self, scenarios):
+        """
+        Reprice the portfolio under user-defined market shock scenarios.
+ 
+        For each scenario, every option's S0 and sigma are shocked by the
+        specified multiplicative factors and the portfolio is repriced from
+        scratch. P&L is the change in total portfolio value.
+ 
+        Parameters
+        ----------
+        scenarios : list of dict
+            Each dict must contain:
+                "name"       : str   — scenario label
+                "spot_shock" : float — multiplicative spot shock (e.g. 0.80 = -20%)
+                "vol_shock"  : float — multiplicative vol shock  (e.g. 1.30 = +30%)
+ 
+        Returns
+        -------
+        pd.DataFrame
+            Scenario | Spot Shock | Vol Shock | Shocked Value | P&L
+        """
+        import copy
+        base_value = self.value ()
+        rows = []
+ 
+        for scenario in scenarios:
+            name       = scenario ["name"]
+            spot_shock = scenario.get ("spot_shock", 1.0)
+            vol_shock  = scenario.get ("vol_shock",  1.0)
+ 
+            shocked_value = 0.0
+            for p in self.positions:
+                instr = p ["instrument"]
+                qty   = p ["quantity"]
+ 
+                repriced = copy.deepcopy (instr)
+                if hasattr (repriced, "S0"):
+                    repriced.S0 = instr.S0 * spot_shock
+                if hasattr (repriced, "sigma"):
+                    repriced.sigma = instr.sigma * vol_shock
+ 
+                shocked_value += repriced.price () * qty
+ 
+            rows.append ({
+                "Scenario"          : name,
+                "Spot Shock"        : f"{(spot_shock - 1) * 100:+.0f}%",
+                "Vol Shock"         : f"{(vol_shock  - 1) * 100:+.0f}%",
+                "Shocked Value ($)" : round (shocked_value, 4),
+                "P&L ($)"           : round (shocked_value - base_value, 4),
+            })
+ 
+        return pd.DataFrame (rows).set_index ("Scenario")
+
+
+    
+
+
+
+
