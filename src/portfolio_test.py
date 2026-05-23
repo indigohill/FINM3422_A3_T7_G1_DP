@@ -1,5 +1,21 @@
 import pandas as pd
 import numpy as np
+import os
+import matplotlib.pyplot as plt
+import yfinance as yf
+
+#Import the standalone risk functions from risk.py
+#These are kept separate so they can be resused outside the Portfolio class
+import sys
+sys.path.insert (0, os.path.dirname(os.path.abspath(__file__)))
+
+from risk import (
+    historical_var,
+    parametric_var,
+    monte_carlo_var,
+    expected_shortfall,
+    max_drawdown
+)
 
 
 class EquityPosition:
