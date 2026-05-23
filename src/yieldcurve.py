@@ -2,7 +2,7 @@
 
 yieldcurve.py: Yield Curve and Discounting Module
 
-Purpose: Provides the YieldCurve class which
+Purpose: Provides the YieldCurve class which:
 - Stores zero-coupon rates for various maturities.
 - Interpolates rates at arbitrary maturities using two methods (linear, cubic spline).
 - Computes discount factors using continuous or annual compounding.
