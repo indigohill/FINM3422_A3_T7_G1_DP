@@ -307,4 +307,101 @@ class Portfolio:
         wealth = (1 + returns).cumprod ()
         return max_drawdown (wealth)
     
+
+    def monte_carlo_var (
+            self, 
+            spot, 
+            sigma,
+            alpha = 0.95,
+            horizon_days = 1,
+            n_sims          = 10_000,
+        seed            = 42,
+        risk_free_rate  = 0.045,
+        dividend_yield  = 0.0,
+    ):
+        """
+        Monte Carlo VaR via full portfolio revaluation.
+ 
+        Simulates spot price paths under GBM, revalues each position at
+        the new spot price, and computes the P&L distribution. This
+        correctly captures non-linear payoff convexity (gamma effects)
+        that delta-based VaR misses.
+
+        Parameters
+        
+        spot : float
+            Current underlying spot price.
+        sigma : float
+            Annualised volatility.
+        alpha : float
+            Confidence level.
+        horizon_days : int
+            Holding period in days.
+        n_sims : int
+            Number of Monte Carlo paths (must be even).
+        seed : int
+            Random seed for reproducibility.
+        risk_free_rate : float
+            Risk-free rate for GBM drift.
+        dividend_yield : float
+            Continuous dividend yield for GBM drift.
+ 
+        Returns
+        dict
+            {"var": float, "es": float, "n_sims": int}
+        """
+
+        initial_value = self.value ()
+
+        def revalue (new_spot):
+            # For this simple portfolio, we assume all positions are linear in the spot price.
+            # In a more complex portfolio with options, you'd need to revalue each position
+            # according to its payoff function at the new spot price.
+             total = 0.0
+             for p in self.positions:
+                instr = p ["instrument"]
+                qty   = p ["quantity"]
+                # Create a repriced copy by modifying S0 on a deepcopy.
+                import copy
+                repriced = copy.deepcopy (instr)
+                if hasattr (repriced, "S0"):
+                    repriced.S0 = new_spot
+                total += repriced.price () * qty
+             return total
+        
+        return monte_carlo_var (
+            revaluation_fn  = revalue,
+            initial_value   = initial_value,
+            spot            = spot,
+            sigma           = sigma,
+            horizon_days    = horizon_days,
+            alpha           = alpha,
+            n_sims          = n_sims,
+            seed            = seed,
+            risk_free_rate  = risk_free_rate,
+            dividend_yield  = dividend_yield,
+        )
     
+    
+    
+    def risk_summary (self, alpha = 0.95, horizon_days =1):
+        """
+        Provide a summary of the portfolio's risk metrics.
+        """
+
+        h_var = self.historical_var  (alpha = alpha, horizon_days = horizon_days)
+        p_var = self.parametric_var  (alpha = alpha, horizon_days = horizon_days)
+        es    = self.expected_shortfall (alpha = alpha, horizon_days = horizon_days)
+        mdd   = self.max_drawdown ()
+ 
+        rows = [
+            {"Metric": f"Historical VaR ({alpha:.0%}, {horizon_days}d)",  "Value ($)": round (h_var, 4)},
+            {"Metric": f"Parametric VaR ({alpha:.0%}, {horizon_days}d)",  "Value ($)": round (p_var, 4)},
+            {"Metric": f"Expected Shortfall ({alpha:.0%}, {horizon_days}d)", "Value ($)": round (es, 4)},
+            {"Metric": "Max Drawdown (underlying)",                        "Value ($)": f"{mdd:.2%}"},
+            {"Metric": "Portfolio Value",                                   "Value ($)": round (self.value (), 4)},
+            {"Metric": "Portfolio Delta",                                   "Value ($)": round (self.delta (), 4)},
+        ]
+        return pd.DataFrame (rows).set_index ("Metric")
+    
+
