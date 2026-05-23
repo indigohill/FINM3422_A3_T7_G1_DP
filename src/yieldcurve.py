@@ -103,9 +103,9 @@ class YieldCurve:
         """
         """ Import data here (instead of at the top) so that yield.curve.py can be used independently without data_loader.py present."""
         try:
-            from data_loader import get_latest_yields
+            from yield_data_loader import get_latest_yields
         except ModuleNotFoundError:
-            from src.data_loader import get_latest_yields
+            from src.yield_data_loader import get_latest_yields
 
         date, yields = get_latest_yields()
 
