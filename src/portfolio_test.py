@@ -21,6 +21,8 @@ from risk import (
 class EquityPosition:
     """
     Simple equity object for this portfolio layer.
+    An equity position has delt = 1 because the position value moves
+    dollar-for-dollar with the underlying stock price.
     """
     def __init__(self, ticker, spot):
         self.ticker = ticker
@@ -30,6 +32,7 @@ class EquityPosition:
         return self.ticker
 
     def price(self):
+        """ Return the current spot price of the equity."""
         return self.spot
 
     def delta(self):
@@ -47,12 +50,14 @@ class Portfolio:
 
     def __init__(self):
         self.positions = []
+        self._returns = None #cached return series after load equity returns
 
     def add_position(self, instrument, quantity, label=None):
         """Add an instrument position into the portfolio."""
 
         # Potentially set this up so you can't append two of the same instruments
         # if you don't have a dictionary, do this. If there is, alter the qty...
+
         self.positions.append({
             "instrument" : instrument,
             "quantity"   : quantity,
@@ -124,6 +129,70 @@ class Portfolio:
 
             df = pd.concat([df, total_row], ignore_index=True)
         return df
+    
+
+    #Equity Return Data
+
+    def load_equity_returns (self, ticker, period ="5y", cache_dir =None):
+        """
+        Load historical returns for a given equity ticker using yfinance.
+        Log returns are used (rather than simple returns) because they are additive over time,
+        and consisitent with the GBM assumption underlying Black-Scholes.
+
+        Computed as: r_t = ln(Pt / Pt-1)
+
+        Results are cached to a CSV so that subsequent runs can be done offline.
+
+        Parameters
+        ----------
+        ticker : str
+            Yahoo Finance ticker.
+        period : str
+            Data period to fetch (e.g., '1y', '5y').
+        cache_dir : str or None
+            Directory to cache downloaded data. If None, no caching is done.
+
+        Returns
+        -------
+        pd.Series
+            Series of historical returns.
+        """
+        if cache_dir is not None:
+            cache_path = os.path.join (cache_dir, f"{ticker}_returns.csv")
+            if os.path.exists (cache_path):
+                print (f"[portfolio] Loading cached returns: {cache_path}")
+                returns = pd.read_csv (cache_path, index_col=0, parse_dates = True).squeeze ()
+                self._returns = returns
+                print (f"[portfolio] {len (returns)} daily returns loaded "
+                       f"({returns.index [0].date()} to {returns.index [-1].date()})")
+                return returns
+            
+        #Download data using yfinance
+        print (f"[portfolio] Downloading {ticker} ({period})...")
+        data   = yf.download (ticker, period = period, auto_adjust = True, progress = False)
+        prices = data ["Close"].squeeze ()
+        returns = np.log (prices / prices.shift (1)).dropna ()
+ 
+        # Save to cache.
+        if cache_dir is not None:
+            os.makedirs (cache_dir, exist_ok = True)
+            returns.to_csv (cache_path)
+            print (f"[portfolio] Cached to {cache_path}")
+ 
+        self._returns = returns
+        print (f"[portfolio] {len (returns)} daily returns loaded "
+               f"({returns.index [0].date()} to {returns.index [-1].date()})")
+        return returns
+ 
+    def _get_returns (self):
+        """Internal helper — returns cached series or raises if not loaded."""
+        if self._returns is None:
+            raise RuntimeError (
+                "No return data loaded. Call load_equity_returns() first."
+            )
+        return self._returns
+
+
 
     def historical_var(self, returns, alpha=0.95, horizon_days=1):
         """
