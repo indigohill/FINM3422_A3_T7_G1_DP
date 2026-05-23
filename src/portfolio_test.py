@@ -289,3 +289,22 @@ class Portfolio:
             horizon_days    = horizon_days,
             portfolio_value = self.value (),
         )
+    
+    def max_drawdown (self, returns):
+        """
+        Maximum peak-to-trough drawdown of the portfolio's cumulative returns.
+ 
+        Builds a cumulative wealth index from the return series, then finds
+        the largest percentage decline from any peak.
+
+        Returns
+        -------
+        float
+            Maximum drawdown as a positive percentage (e.g., 0.2 for 20% drawdown).
+        """
+        returns = self._get_returns ()
+        # Build a cumulative wealth index (start at $1).
+        wealth = (1 + returns).cumprod ()
+        return max_drawdown (wealth)
+    
+    
