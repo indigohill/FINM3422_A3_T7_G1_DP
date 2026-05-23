@@ -485,6 +485,85 @@ class Portfolio:
             })
  
         return pd.DataFrame (rows).set_index ("Scenario")
+    
+
+    # Visualisation
+
+    def plot_return_distribution (self, alpha = 0.95, show = True):
+        from scipy.stats import norm as scipy_norm
+ 
+        returns   = self._get_returns ()
+        port_val  = self.value ()
+        pnl       = returns * port_val  # approximate daily P&L in dollars
+ 
+        fig, ax = plt.subplots (figsize = (11, 5))
+ 
+        # Empirical histogram.
+        ax.hist (pnl, bins = 60, density = True, color = "steelblue",
+                 alpha = 0.55, label = "Historical P&L distribution")
+ 
+        # Fitted normal curve.
+        x_grid = np.linspace (pnl.min (), pnl.max (), 300)
+        ax.plot (x_grid, scipy_norm.pdf (x_grid, pnl.mean (), pnl.std ()),
+                 color = "coral", linewidth = 2, label = "Fitted normal distribution")
+ 
+        # Historical VaR line.
+        h_var = self.historical_var (alpha = alpha)
+        ax.axvline (-h_var, color = "red", linewidth = 2, linestyle = "--",
+                    label = f"Historical VaR ({alpha:.0%}) = ${h_var:,.2f}")
+ 
+        # Parametric VaR line.
+        p_var = self.parametric_var (alpha = alpha)
+        ax.axvline (-p_var, color = "orange", linewidth = 2, linestyle = ":",
+                    label = f"Parametric VaR ({alpha:.0%}) = ${p_var:,.2f}")
+ 
+        # Expected Shortfall line.
+        es = self.expected_shortfall (alpha = alpha)
+        ax.axvline (-es, color = "darkred", linewidth = 1.5, linestyle = "-.",
+                    label = f"Expected Shortfall ({alpha:.0%}) = ${es:,.2f}")
+ 
+        ax.set_title (
+            f"Portfolio Daily P&L Distribution\n"
+            f"Historical vs Parametric VaR at {alpha:.0%} confidence",
+            fontsize = 13, fontweight = "bold"
+        )
+        ax.set_xlabel ("Daily P&L ($)")
+        ax.set_ylabel ("Density")
+        ax.legend (fontsize = 9)
+        ax.grid (True, linestyle = "--", alpha = 0.4)
+        plt.tight_layout ()
+ 
+        if show:
+            plt.show ()
+ 
+        return ax
+ 
+    def plot_scenario_analysis (self, scenarios, show = True):
+       
+        results = self.scenario_analysis (scenarios)
+ 
+        fig, ax = plt.subplots (figsize = (10, 5))
+ 
+        # Green bars for gains, red for losses.
+        colors = ["steelblue" if v >= 0 else "coral"
+                  for v in results ["P&L ($)"]]
+        results ["P&L ($)"].plot (kind = "bar", ax = ax,
+                                  color = colors, edgecolor = "white")
+ 
+        ax.axhline (0, color = "black", linewidth = 0.8)
+        ax.set_title ("Portfolio P&L Under Stress Scenarios",
+                      fontsize = 13, fontweight = "bold")
+        ax.set_xlabel ("Scenario")
+        ax.set_ylabel ("P&L ($)")
+        ax.tick_params (axis = "x", rotation = 20)
+        ax.grid (True, linestyle = "--", alpha = 0.4, axis = "y")
+        plt.tight_layout ()
+ 
+        if show:
+            plt.show ()
+ 
+        return ax
+
 
 
     
