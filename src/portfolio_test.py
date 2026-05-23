@@ -4,8 +4,8 @@ import os
 import matplotlib.pyplot as plt
 import yfinance as yf
 
-#Import the standalone risk functions from risk.py
-#These are kept separate so they can be resused outside the Portfolio class
+# Import the standalone risk functions from risk.py.
+# These are kept separate so they can be reused outside the Portfolio class.
 import sys
 sys.path.insert (0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -21,7 +21,7 @@ from risk import (
 class EquityPosition:
     """
     Simple equity object for this portfolio layer.
-    An equity position has delt = 1 because the position value moves
+    An equity position has delta = 1 because the position value moves
     dollar-for-dollar with the underlying stock price.
     """
     def __init__(self, ticker, spot):
@@ -137,7 +137,7 @@ class Portfolio:
         """
         Load historical returns for a given equity ticker using yfinance.
         Log returns are used (rather than simple returns) because they are additive over time,
-        and consisitent with the GBM assumption underlying Black-Scholes.
+        and consistent with the GBM assumption underlying Black-Scholes.
 
         Computed as: r_t = ln(Pt / Pt-1)
 
@@ -198,14 +198,12 @@ class Portfolio:
 
     #Risk Metrics
 
-    def historical_var(self, returns, alpha=0.95, horizon_days=1):
+    def historical_var(self, alpha=0.95, horizon_days=1):
         """
-        Compute a basic historical VaR.
+        Compute historical VaR using cached return data.
 
         Parameters
         ----------
-        returns : array
-            Historical return series.
         alpha : float
             Confidence level (typically 0.95 or 0.99).
         horizon_days : int
@@ -216,19 +214,13 @@ class Portfolio:
         float
             Historical VaR in $.
         """
-        returns = pd.Series(returns).dropna()
-
-        if len(returns) == 0:
-            raise ValueError("Return series is empty.")
-        if horizon_days <= 0:
-            raise ValueError("horizon_days must be positive.")
-
-        # Scale daily returns to the desired horizon using square root of time rule
-        scaled_returns = returns * np.sqrt(horizon_days)
-
-        q       = scaled_returns.quantile(1 - alpha)
-        var     = -q * self.value()
-        return max(var, 0)
+        returns = self._get_returns ()
+        return historical_var (
+            returns,
+            alpha           = alpha,
+            horizon_days    = horizon_days,
+            portfolio_value = self.value (),
+        )
     
 
     def parametric_var (self, alpha=0.95, horizon_days=1):
@@ -290,7 +282,7 @@ class Portfolio:
             portfolio_value = self.value (),
         )
     
-    def max_drawdown (self, returns):
+    def max_drawdown (self):
         """
         Maximum peak-to-trough drawdown of the portfolio's cumulative returns.
  
@@ -366,6 +358,8 @@ class Portfolio:
                 repriced = copy.deepcopy (instr)
                 if hasattr (repriced, "S0"):
                     repriced.S0 = new_spot
+                elif hasattr (repriced, "spot"):
+                    repriced.spot = new_spot
                 total += repriced.price () * qty
              return total
         
@@ -471,6 +465,8 @@ class Portfolio:
                 repriced = copy.deepcopy (instr)
                 if hasattr (repriced, "S0"):
                     repriced.S0 = instr.S0 * spot_shock
+                elif hasattr (repriced, "spot"):
+                    repriced.spot = instr.spot * spot_shock
                 if hasattr (repriced, "sigma"):
                     repriced.sigma = instr.sigma * vol_shock
  
