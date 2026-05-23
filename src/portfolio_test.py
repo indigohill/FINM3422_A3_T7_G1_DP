@@ -194,6 +194,10 @@ class Portfolio:
 
 
 
+
+
+    #Risk Metrics
+
     def historical_var(self, returns, alpha=0.95, horizon_days=1):
         """
         Compute a basic historical VaR.
@@ -225,3 +229,34 @@ class Portfolio:
         q       = scaled_returns.quantile(1 - alpha)
         var     = -q * self.value()
         return max(var, 0)
+    
+
+    def parametric_var (self, alpha=0.95, horizon_days=1):
+        """
+        Gaussian assumption using historical mean and std.
+
+        Usually underestimates tail risk because real equity returns
+        are leptokurtic (fat-tailed). Compare with historical_var() to
+        quantify the impact of the normality assumption.
+
+        Parameters
+        ----------
+        alpha : float
+            Confidence level.
+        horizon_days : int
+            Holding period in days.
+ 
+        Returns
+        -------
+        float
+            VaR in dollars (positive).
+
+        """
+        
+        returns = self._get_returns ()
+        return parametric_var (
+            returns,
+            alpha           = alpha,
+            horizon_days    = horizon_days,
+            portfolio_value = self.value (),
+        )
