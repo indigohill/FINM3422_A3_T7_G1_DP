@@ -307,9 +307,9 @@ class Portfolio:
             alpha = 0.95,
             horizon_days = 1,
             n_sims          = 10_000,
-        seed            = 42,
-        risk_free_rate  = 0.045,
-        dividend_yield  = 0.0,
+            seed            = 42,
+            risk_free_rate  = 0.045,
+            dividend_yield  = 0.0,
     ):
         """
         Monte Carlo VaR via full portfolio revaluation.
@@ -349,8 +349,8 @@ class Portfolio:
             # For this simple portfolio, we assume all positions are linear in the spot price.
             # In a more complex portfolio with options, you'd need to revalue each position
             # according to its payoff function at the new spot price.
-             total = 0.0
-             for p in self.positions:
+            total = 0.0
+            for p in self.positions:
                 instr = p ["instrument"]
                 qty   = p ["quantity"]
                 # Create a repriced copy by modifying S0 on a deepcopy.
@@ -361,7 +361,7 @@ class Portfolio:
                 elif hasattr (repriced, "spot"):
                     repriced.spot = new_spot
                 total += repriced.price () * qty
-             return total
+            return total
         
         return monte_carlo_var (
             revaluation_fn  = revalue,
@@ -403,19 +403,18 @@ class Portfolio:
     # Distribution Statistics
 
     def return_distribution_stats (self):
-       """Compute descriptive statistics of the underlying return distribution.
+        """Compute descriptive statistics of the underlying return distribution.
  
-        Includes kurtosis and skewness to characterise leptokurtosis and
-        asymmetry — key limitations of the parametric VaR normality assumption.
+            Includes kurtosis and skewness to characterise leptokurtosis and
+            asymmetry — key limitations of the parametric VaR normality assumption.
  
-        Returns
-        -------
-        dict
+            Returns
+            -------
+            dict
             Mean, std, skewness, kurtosis, excess kurtosis, leptokurtic flag.
         """
-       
-       returns = self._get_returns ()
-       return {
+        returns = self._get_returns ()
+        return {
             "Mean (daily)"    : round (float (returns.mean ()), 6),
             "Std Dev (daily)" : round (float (returns.std ()), 6),
             "Skewness"        : round (float (returns.skew ()), 4),
@@ -486,6 +485,8 @@ class Portfolio:
     # Visualisation
 
     def plot_return_distribution (self, alpha = 0.95, show = True):
+        """Plot the P&L distribution with historical VaR, parametric VaR, and expected shortfall lines."""
+        
         from scipy.stats import norm as scipy_norm
  
         returns   = self._get_returns ()
@@ -535,6 +536,8 @@ class Portfolio:
         return ax
  
     def plot_scenario_analysis (self, scenarios, show = True):
+        """Plot portfolio P&L under user-defined shock scenarios as a bar chart.
+            Blue indicates gains, coral bars indicate losses"""
        
         results = self.scenario_analysis (scenarios)
  
