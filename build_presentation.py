@@ -13,6 +13,20 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 import os
+import sys
+import io
+import tempfile
+
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+from scipy.stats import norm as scipy_norm
+from scipy.interpolate import CubicSpline
+
+sys.path.insert(0, '/home/user/FINM3422_A3_T7_G1_DP')
 
 # ── Colour palette ────────────────────────────────────────────────────────────
 C_BG_TITLE   = RGBColor(0xEB, 0xED, 0xF9)   # #EBEDF9 – title slide BG
