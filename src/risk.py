@@ -262,7 +262,7 @@ def monte_carlo_var(
     Z = np.concatenate([Z, -Z])
 
     T = horizon_days / 252.0
-    drift = (risk_free_rate - dividend_yield - 0.5 * sigma ** 2) * T
+    drift = (risk_free_rate - dividend_yield - 0.5 * sigma**2) * T
     diffusion = sigma * np.sqrt(T) * Z
     S_terminal = spot * np.exp(drift + diffusion)
 
