@@ -43,7 +43,7 @@ def load_raw() -> pd.DataFrame:
     for mat in maturities:
         df[mat] = (
             pd.to_numeric(df[mat], errors="coerce") / 100
-        )  # divide by 100 to convert into deciaml form.
+        )  # divide by 100 to convert into decimal form.
         df[mat] = df[mat].where(df[mat] > 0)
 
     # Drop rows where all rate columns are missing.
@@ -76,7 +76,7 @@ def sanity_check(df: pd.DataFrame) -> None:
         ).all(), f"Non-positive rates found in {mat}year column."  # Ensure that all interest rates are positive.
         assert (
             col < 0.30
-        ).all(), f"Implausibly high rates (>30&) in {mat}year column."  # Ensure that there are no rates that are significantly high. If so, there might be an error with data.
+        ).all(), f"Implausibly high rates (>30%) in {mat}year column."  # Ensure that there are no rates that are significantly high. If so, there might be an error with data.
 
     """Print a summary of the cleaned data to show readers."""
     latest = df.iloc[-1]
@@ -87,7 +87,7 @@ def sanity_check(df: pd.DataFrame) -> None:
         f" Maturities: {len(maturities)} points (0 years to 10 years in 0.25 year increments)"
     )
     print(f" Latest rates (% p.a.) - selected maturities:")
-    for mat in [0, 0.25, 0.5, 0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 10.0]:
+    for mat in [0, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 10.0]:
         """For readability, present in percentage format."""
         print(f" {mat:>5.2f}yr: {latest[mat]*100:.4f}%")
 
@@ -121,7 +121,7 @@ def load_yield_curve_data(use_cache: bool = True) -> pd.DataFrame:
     print(f"[data_loader] Reading raw file: {RAW_PATH}")
     df = load_raw()
 
-    # Run sanity checks to confirm the data is valid before uisng.
+    # Run sanity checks to confirm the data is valid before using.
     sanity_check(df)
 
     # Save the cleaned data to CSV so future runs skip the Excel processing step.
