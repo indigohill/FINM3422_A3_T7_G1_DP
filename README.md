@@ -27,7 +27,7 @@ FINM3422_A3_T7_G1_DP/
 ├── AI_USAGE.md                     ← AI tooling acknowledgement
 │
 ├── data/                           ← cached data for offline reproducibility
-│   ├── F17_data_raw.xlsx           ← raw RBA F17 download
+│   ├── F17_DATA_RAW.xlsx           ← raw RBA F17 download
 │   ├── F17_DATA_CLEAN.csv          ← cleaned yield curve, generated on first run
 │   ├── equity_data.csv             ← spot, volatility, dividend yield per ticker (yfinance cache)
 │   └── equity_returns.csv          ← 2y daily log returns per ticker
@@ -38,10 +38,11 @@ FINM3422_A3_T7_G1_DP/
 ├── notebooks/                      ← analysis notebooks (run in order)
 │   ├── 01_yield_curve.ipynb        ← curve construction, interpolation comparison
 │   ├── 02_derivative.ipynb         ← option pricing engine and Greeks across the universe
-│   └── 03_trading_desk_analysis.ipynb  ← final integrated dashboard with portfolio construction, positions, scenarios, risk analytics
+│   ├── 03_portfolio.ipynb          ← portfolio construction and position aggregation
+│   └── 04_trading_desk_analysis.ipynb  ← final integrated dashboard with positions, scenarios, risk analytics
 │
 └── src/                            ← reusable Python modules
-    ├── yield_data_loader.py        ← RBA F17 ingestion and CSV caching
+    ├── data_loader_yieldcurve.py   ← RBA F17 ingestion and CSV caching
     ├── data_loader_market.py       ← yfinance ingestion and CSV caching
     ├── yield_curve.py              ← YieldCurve class
     ├── derivative.py               ← Derivative base + EuropeanCall/Put, BinomialEuropean*, American*
@@ -96,7 +97,8 @@ Open and run the notebooks **in order**. Each notebook imports from `src/` via t
 |---|---|---|
 | `01_yield_curve.ipynb` | < 5 s | < 5 s |
 | `02_derivative.ipynb` | ~ 30 s | ~ 60 s |
-| `03_trading_desk_analysis.ipynb` | ~ 60 s | ~ 90 s |
+| `03_portfolio.ipynb` | ~ 30 s | ~ 60 s |
+| `04_trading_desk_analysis.ipynb` | ~ 60 s | ~ 90 s |
 
 To force fresh data downloads, delete the relevant file in `data/` and re-run, or pass `use_cache=False` to `load_equity_data()` / `from_rba()`.
 
@@ -104,8 +106,8 @@ To force fresh data downloads, delete the relevant file in `data/` and re-run, o
 
 ## 5. Module Overview (`src/`)
 
-### `yield_data_loader.py`
-Ingests the RBA F17 raw Excel file, cleans it, caches the result to `data/F17_data_clean.csv`, and exposes `get_latest_yields()` returning the most recent observation date and a `{maturity: zero_rate}` dictionary across 41 maturities (0–10 years in 0.25-year increments).
+### `data_loader_yieldcurve.py`
+Ingests the RBA F17 raw Excel file, cleans it, caches the result to `data/F17_DATA_CLEAN.csv`, and exposes `get_latest_yields()` returning the most recent observation date and a `{maturity: zero_rate}` dictionary across 41 maturities (0–10 years in 0.25-year increments).
 
 ### `data_loader_market.py`
 Downloads ASX equity data via `yfinance` for the universe (CBA, BHP, CSL), computes annualised historical volatility from 2-year daily log returns, retrieves trailing 12-month dividend yields, and caches the result to `data/equity_data.csv`. Also provides `get_rolling_volatility()` for time-varying σ analysis.
@@ -142,7 +144,7 @@ Standalone, stateless functions for risk metrics. Decoupled from the Portfolio c
 
 | Source | Type | Detail | Cache |
 |---|---|---|---|
-| **RBA F17** | Interest rates | Reserve Bank of Australia, Statistical Table F17 — Zero-Coupon Interest Rates, Analytical Series. 41 maturities (0–10y, 0.25y steps). Manually downloaded as `data/F17_data_raw.xlsx`. | `data/F17_DATA_CLEAN.csv` |
+| **RBA F17** | Interest rates | Reserve Bank of Australia, Statistical Table F17 — Zero-Coupon Interest Rates, Analytical Series. 41 maturities (0–10y, 0.25y steps). Manually downloaded as `data/F17_DATA_RAW.xlsx`. | `data/F17_DATA_CLEAN.csv` |
 | **Yahoo Finance** (via `yfinance`) | Equity market data | 2-year daily adjusted close for CBA.AX, BHP.AX, CSL.AX, WES.AX, TLS.AX. Derives spot (S₀), annualised volatility (σ), trailing dividend yield (q). | `data/equity_data.csv`, `data/equity_returns.csv` |
 
 **Observation date for yield curve**: 30-04-2026 (printed by `YieldCurve.from_rba()` at construction).
@@ -164,7 +166,7 @@ Standalone, stateless functions for risk metrics. Decoupled from the Portfolio c
 
 ## 9. Known Limitations
 
-These are documented in detail in `05_trading_desk_analysis.ipynb`, but a brief summary:
+These are documented in detail in `04_trading_desk_analysis.ipynb`, but a brief summary:
 
 - **Static market data.** All inputs (spot, σ, dividend yield, yield curve) are snapshots, not live feeds.
 - **Historical volatility, not implied.** σ is estimated from 2-year daily log returns; implied volatility (e.g. from option-chain data) would be more forward-looking but is out of scope.

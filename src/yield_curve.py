@@ -25,7 +25,7 @@ class YieldCurve:
     ---------------------------
     Yield Curve constructs a term-structure of zero-coupon interest rates and provides discount factors for use across all valuation models.
 
-    This class is the interest-rate infrastructure layer for the platform. It is reused by `derivative.py` and `portfolio.py` whereveer discounting is required.
+    This class is the interest-rate infrastructure layer for the platform. It is reused by `derivative.py` and `portfolio.py` wherever discounting is required.
 
     """
 
@@ -131,7 +131,7 @@ class YieldCurve:
         # Print a confirmation message so that the user knows what data was loaded.
         print(f" [YieldCurve] Built from RBA F17 data as of {date}.")
         print(
-            f" Maturtites: {len(maturities)} points (0yr to 10yr in 0.25yr increments.)"
+            f" Maturities: {len(maturities)} points (0yr to 10yr in 0.25yr increments.)"
         )
         print(f" Compounding: {compounding}")
         print(f" Interpolation: {interpolation}")
@@ -160,7 +160,7 @@ class YieldCurve:
 
         """
         # np.interp performs linear interpolation:
-        # Given a target value T, it finds wherw T sits between the known maturities and returns the proportionally weighted rate between the two nearest points.
+        # Given a target value T, it finds where T sits between the known maturities and returns the proportionally weighted rate between the two nearest points.
         if self.interpolation == "linear":
             return float(
                 np.interp(float(T), self.maturities, self.zero_rates)
@@ -187,7 +187,7 @@ class YieldCurve:
         float
             Discount factor (between 0 and 1).
         """
-        # Retrieve the interpolated zero rate for this maturiy.
+        # Retrieve the interpolated zero rate for this maturity.
         z = self.get_zero_rate(T)
 
         if self.compounding == "continuous":

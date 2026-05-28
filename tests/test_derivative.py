@@ -25,7 +25,7 @@ import pytest
 # Add src to path so we can import the derivatives module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from derivative_test import (
+from derivative import (
     EuropeanCall,
     EuropeanPut,
     BinomialEuropeanCall,
