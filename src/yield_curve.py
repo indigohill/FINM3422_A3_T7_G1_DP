@@ -109,9 +109,19 @@ class YieldCurve:
         """
         """ Import data here (instead of at the top) so that yield.curve.py can be used independently without data_loader.py present."""
         try:
-            from yield_data_loader import get_latest_yields
-        except ModuleNotFoundError:
-            from src.yield_data_loader import get_latest_yields
+            from src.data_loader_yieldcurve import get_latest_yields
+        except (ModuleNotFoundError, ImportError):
+            try:
+                from .data_loader_yieldcurve import get_latest_yields
+            except (ModuleNotFoundError, ImportError):
+                import importlib.util
+                import pathlib
+                import sys
+
+                project_root = pathlib.Path(__file__).resolve().parent
+                if str(project_root) not in sys.path:
+                    sys.path.insert(0, str(project_root))
+                from data_loader_yieldcurve import get_latest_yields
 
         date, yields = get_latest_yields()
 
@@ -325,8 +335,48 @@ class YieldCurve:
         return results
 
 
-# Tests
-# -------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------
+# Convenience Function
+# --------------------------------------------------------------------------------------------------
+
+def load_yield_curve(interpolation="linear", compounding="continuous"):
+    """
+    Description
+    --------------------------
+    Construct and return the RBA yield curve with a confirmation summary.
+
+    A convenience wrapper around YieldCurve.from_rba() that keeps
+    the notebook clean — one import, one line to get the curve.
+
+    Parameters
+    --------------------------
+    interpolation: str
+    - 'linear' (default) or 'cubic'.
+    compounding: str
+    - 'continuous' (default) or 'annual'.
+
+    Returns
+    --------------------------
+    YieldCurve
+    - Yield curve built from the latest RBA F17 data.
+    """
+    # Construct the yield curve from the latest RBA F17 data.
+    yield_curve = YieldCurve.from_rba(interpolation=interpolation, compounding=compounding)
+
+    # Confirm rates at key option maturities.
+    print("Risk-free rates at key option maturities (from RBA F17):")
+    for T, label in [(0.25, "3 months"), (0.5, "6 months"), (1.0, "1 year")]:
+        r = yield_curve.get_zero_rate(T)
+        d = yield_curve.get_discount_factor(T)
+        print(f"  {label:<12} | r = {r*100:.4f}% | D(T) = {d:.6f}")
+
+    return yield_curve
+
+
+# --------------------------------------------------------------------------------------------------
+# Quick Test
+# --------------------------------------------------------------------------------------------------
+
 if __name__ == "__main__":
-    curve = YieldCurve.from_rba()
-    print(curve.compare_interpolation().to_string())
+    yield_curve = YieldCurve.from_rba()
+    print(yield_curve.compare_interpolation().to_string())
