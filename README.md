@@ -39,7 +39,6 @@ FINM3422_A3_T7_G1_DP/
 ├── notebooks/                      ← analysis notebooks (run in order)
 │   ├── 01_yield_curve.ipynb        ← curve construction, interpolation comparison
 │   ├── 02_derivative.ipynb         ← option pricing engine and Greeks across the universe
-│   ├── 03_portfolio.ipynb          ← portfolio construction and position aggregation
 │   └── 04_trading_desk_analysis.ipynb  ← final integrated dashboard with positions, scenarios, risk analytics
 │
 └── src/                            ← reusable Python modules
