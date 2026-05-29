@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 # Add src to path so we can import the derivatives module
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from derivative import (
     EuropeanCall,
@@ -61,6 +61,7 @@ BS_PUT_REF = 5.785859
 # Black-Scholes pricing
 # ----------------------------------------------------------------------
 
+
 def test_bs_call_price():
     """BS call should match textbook reference."""
     call = EuropeanCall(S0, K, T, SIGMA, FlatCurve())
@@ -96,6 +97,7 @@ def test_bs_put_call_parity_with_dividends():
 # Greeks: FD vs closed-form
 # ----------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("greek_name", ["delta", "gamma", "vega", "theta", "rho"])
 def test_call_fd_vs_cf_greeks(greek_name):
     """FD and closed-form Greeks should agree for the call."""
@@ -118,24 +120,31 @@ def test_put_fd_vs_cf_greeks(greek_name):
 # Binomial CRR (European) convergence
 # ----------------------------------------------------------------------
 
-@pytest.mark.parametrize("N,tol", [
-    (100, 0.02),
-    (500, 0.005),
-    (1000, 0.003),
-    (5000, 0.001),
-])
+
+@pytest.mark.parametrize(
+    "N,tol",
+    [
+        (100, 0.02),
+        (500, 0.005),
+        (1000, 0.003),
+        (5000, 0.001),
+    ],
+)
 def test_binomial_call_converges_to_bs(N, tol):
     """Binomial call converges to BS as N grows."""
     bin_call = BinomialEuropeanCall(S0, K, T, SIGMA, FlatCurve(), N=N)
     assert abs(bin_call.price() - BS_CALL_REF) < tol
 
 
-@pytest.mark.parametrize("N,tol", [
-    (100, 0.02),
-    (500, 0.005),
-    (1000, 0.003),
-    (5000, 0.001),
-])
+@pytest.mark.parametrize(
+    "N,tol",
+    [
+        (100, 0.02),
+        (500, 0.005),
+        (1000, 0.003),
+        (5000, 0.001),
+    ],
+)
 def test_binomial_put_converges_to_bs(N, tol):
     """Binomial put converges to BS as N grows."""
     bin_put = BinomialEuropeanPut(S0, K, T, SIGMA, FlatCurve(), N=N)
@@ -156,8 +165,12 @@ def test_binomial_with_dividends_converges_to_bs():
     q = 0.03
     bs_call = EuropeanCall(S0, K, T, SIGMA, FlatCurve(), dividend_yield=q).price()
     bs_put = EuropeanPut(S0, K, T, SIGMA, FlatCurve(), dividend_yield=q).price()
-    bin_call = BinomialEuropeanCall(S0, K, T, SIGMA, FlatCurve(), dividend_yield=q, N=1000).price()
-    bin_put = BinomialEuropeanPut(S0, K, T, SIGMA, FlatCurve(), dividend_yield=q, N=1000).price()
+    bin_call = BinomialEuropeanCall(
+        S0, K, T, SIGMA, FlatCurve(), dividend_yield=q, N=1000
+    ).price()
+    bin_put = BinomialEuropeanPut(
+        S0, K, T, SIGMA, FlatCurve(), dividend_yield=q, N=1000
+    ).price()
     assert abs(bin_call - bs_call) < 0.005
     assert abs(bin_put - bs_put) < 0.005
 
@@ -172,6 +185,7 @@ def test_binomial_delta_via_inherited_fd():
 # ----------------------------------------------------------------------
 # American option behaviour
 # ----------------------------------------------------------------------
+
 
 def test_american_call_equals_european_when_no_dividends():
     """
@@ -189,7 +203,9 @@ def test_american_call_exceeds_european_with_dividends():
     early exercise just before a dividend can be optimal.
     """
     q = 0.05
-    am_call = AmericanCall(S0, K, T, SIGMA, FlatCurve(), dividend_yield=q, N=1000).price()
+    am_call = AmericanCall(
+        S0, K, T, SIGMA, FlatCurve(), dividend_yield=q, N=1000
+    ).price()
     eu_call = EuropeanCall(S0, K, T, SIGMA, FlatCurve(), dividend_yield=q).price()
     assert am_call > eu_call
 
@@ -213,6 +229,7 @@ def test_american_put_deep_itm_premium_is_substantial():
 # Monte Carlo cross-validation
 # ----------------------------------------------------------------------
 
+
 def test_mc_call_vs_bs():
     """MC call price within tolerance of BS at high path count."""
     call = EuropeanCall(S0, K, T, SIGMA, FlatCurve())
@@ -231,15 +248,19 @@ def test_mc_put_vs_bs():
 # Input validation
 # ----------------------------------------------------------------------
 
-@pytest.mark.parametrize("S0_val,K_val,T_val,sigma_val", [
-    (0, 100, 1.0, 0.20),
-    (-1, 100, 1.0, 0.20),
-    (100, 0, 1.0, 0.20),
-    (100, 100, 0, 0.20),
-    (100, 100, -1, 0.20),
-    (100, 100, 1.0, 0),
-    (100, 100, 1.0, -0.1),
-])
+
+@pytest.mark.parametrize(
+    "S0_val,K_val,T_val,sigma_val",
+    [
+        (0, 100, 1.0, 0.20),
+        (-1, 100, 1.0, 0.20),
+        (100, 0, 1.0, 0.20),
+        (100, 100, 0, 0.20),
+        (100, 100, -1, 0.20),
+        (100, 100, 1.0, 0),
+        (100, 100, 1.0, -0.1),
+    ],
+)
 def test_invalid_inputs_raise(S0_val, K_val, T_val, sigma_val):
     """Invalid inputs should raise ValueError on construction."""
     with pytest.raises(ValueError):
@@ -249,6 +270,7 @@ def test_invalid_inputs_raise(S0_val, K_val, T_val, sigma_val):
 # ----------------------------------------------------------------------
 # Historical volatility helper
 # ----------------------------------------------------------------------
+
 
 def test_historical_volatility_recovers_known_sigma():
     """historical_volatility() recovers a known synthetic vol within ~10%."""
