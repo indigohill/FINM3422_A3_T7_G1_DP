@@ -36,10 +36,10 @@ from risk import (
     max_drawdown,
 )
 
-
 # --------------------------------------------------------------------------------------------------
 # EquityPosition
 # --------------------------------------------------------------------------------------------------
+
 
 class EquityPosition:
     """
@@ -64,7 +64,7 @@ class EquityPosition:
         # Store the ticker symbol for identification in position tables.
         self.ticker = ticker
         # Store the current spot price — used by price() and portfolio valuation.
-        self.spot   = spot
+        self.spot = spot
 
     def get_ticker(self):
         """Return the ticker symbol."""
@@ -85,6 +85,7 @@ class EquityPosition:
 # --------------------------------------------------------------------------------------------------
 # Portfolio Class
 # --------------------------------------------------------------------------------------------------
+
 
 class Portfolio:
     """
@@ -109,7 +110,7 @@ class Portfolio:
         self.positions = []
         # Cached return series — populated by load_equity_returns().
         # Avoids repeated API calls once the series has been downloaded.
-        self._returns  = None
+        self._returns = None
 
     # ------------------------------------------------------------------
     # Position Management
@@ -132,11 +133,13 @@ class Portfolio:
         - Optional display name for the position in tables (default: None).
           If None, the ticker or class name is used automatically.
         """
-        self.positions.append({
-            "instrument" : instrument,
-            "quantity"   : quantity,
-            "label"      : label,
-        })
+        self.positions.append(
+            {
+                "instrument": instrument,
+                "quantity": quantity,
+                "label": label,
+            }
+        )
 
     # ------------------------------------------------------------------
     # Core Metrics
@@ -162,7 +165,7 @@ class Portfolio:
         total_value = 0.0
         for position in self.positions:
             instrument = position["instrument"]
-            quantity   = position["quantity"]
+            quantity = position["quantity"]
             # Accumulate each position's dollar value contribution.
             total_value += quantity * instrument.price()
         return total_value
@@ -189,7 +192,7 @@ class Portfolio:
         total_delta = 0.0
         for position in self.positions:
             instrument = position["instrument"]
-            quantity   = position["quantity"]
+            quantity = position["quantity"]
             # Accumulate each position's delta contribution.
             total_delta += quantity * instrument.delta()
         return total_delta
@@ -219,7 +222,7 @@ class Portfolio:
 
         for position in self.positions:
             instrument = position["instrument"]
-            quantity   = position["quantity"]
+            quantity = position["quantity"]
 
             # Determine the display name for this position.
             if position["label"] is not None:
@@ -235,27 +238,33 @@ class Portfolio:
             unit_value = instrument.price()
             unit_delta = instrument.delta()
 
-            rows.append({
-                "Position"       : name,
-                "Quantity"       : quantity,
-                "Unit Value"     : unit_value,
-                "Position Value" : unit_value * quantity,
-                "Unit Delta"     : unit_delta,
-                "Position Delta" : unit_delta * quantity,
-            })
+            rows.append(
+                {
+                    "Position": name,
+                    "Quantity": quantity,
+                    "Unit Value": unit_value,
+                    "Position Value": unit_value * quantity,
+                    "Unit Delta": unit_delta,
+                    "Position Delta": unit_delta * quantity,
+                }
+            )
 
         df = pd.DataFrame(rows)
 
         if len(df) > 0:
             # Append a TOTAL row summarising value and delta across all positions.
-            total_row = pd.DataFrame([{
-                "Position"       : "TOTAL",
-                "Quantity"       : np.nan,
-                "Unit Value"     : np.nan,
-                "Position Value" : df["Position Value"].sum(),
-                "Unit Delta"     : np.nan,
-                "Position Delta" : df["Position Delta"].sum(),
-            }])
+            total_row = pd.DataFrame(
+                [
+                    {
+                        "Position": "TOTAL",
+                        "Quantity": np.nan,
+                        "Unit Value": np.nan,
+                        "Position Value": df["Position Value"].sum(),
+                        "Unit Delta": np.nan,
+                        "Position Delta": df["Position Delta"].sum(),
+                    }
+                ]
+            )
             df = pd.concat([df, total_row], ignore_index=True)
 
         return df
@@ -296,16 +305,20 @@ class Portfolio:
             if os.path.exists(cache_path):
                 # Load from cache — avoids repeated API calls on subsequent runs.
                 print(f"[portfolio] Loading cached returns: {cache_path}")
-                returns = pd.read_csv(cache_path, index_col=0, parse_dates=True).squeeze()
+                returns = pd.read_csv(
+                    cache_path, index_col=0, parse_dates=True
+                ).squeeze()
                 self._returns = returns
-                print(f"[portfolio] {len(returns)} daily returns loaded "
-                      f"({returns.index[0].date()} to {returns.index[-1].date()})")
+                print(
+                    f"[portfolio] {len(returns)} daily returns loaded "
+                    f"({returns.index[0].date()} to {returns.index[-1].date()})"
+                )
                 return returns
 
         # Download from yfinance if no cache exists.
         print(f"[portfolio] Downloading {ticker} ({period})...")
-        data    = yf.download(ticker, period=period, auto_adjust=True, progress=False)
-        prices  = data["Close"].squeeze()
+        data = yf.download(ticker, period=period, auto_adjust=True, progress=False)
+        prices = data["Close"].squeeze()
         # Compute log returns: ln(P_t / P_{t-1}) — consistent with GBM.
         returns = np.log(prices / prices.shift(1)).dropna()
 
@@ -316,8 +329,10 @@ class Portfolio:
             print(f"[portfolio] Cached to {cache_path}")
 
         self._returns = returns
-        print(f"[portfolio] {len(returns)} daily returns loaded "
-              f"({returns.index[0].date()} to {returns.index[-1].date()})")
+        print(
+            f"[portfolio] {len(returns)} daily returns loaded "
+            f"({returns.index[0].date()} to {returns.index[-1].date()})"
+        )
         return returns
 
     def _get_returns(self):
@@ -361,9 +376,9 @@ class Portfolio:
         # Delegate to the standalone historical_var function in risk.py.
         return historical_var(
             returns,
-            alpha           = alpha,
-            horizon_days    = horizon_days,
-            portfolio_value = self.value(),
+            alpha=alpha,
+            horizon_days=horizon_days,
+            portfolio_value=self.value(),
         )
 
     def parametric_var(self, alpha=0.95, horizon_days=1):
@@ -394,9 +409,9 @@ class Portfolio:
         # Delegate to the standalone parametric_var function in risk.py.
         return parametric_var(
             returns,
-            alpha           = alpha,
-            horizon_days    = horizon_days,
-            portfolio_value = self.value(),
+            alpha=alpha,
+            horizon_days=horizon_days,
+            portfolio_value=self.value(),
         )
 
     def expected_shortfall(self, alpha=0.95, horizon_days=1):
@@ -426,9 +441,9 @@ class Portfolio:
         # Delegate to the standalone expected_shortfall function in risk.py.
         return expected_shortfall(
             returns,
-            alpha           = alpha,
-            horizon_days    = horizon_days,
-            portfolio_value = self.value(),
+            alpha=alpha,
+            horizon_days=horizon_days,
+            portfolio_value=self.value(),
         )
 
     def max_drawdown(self):
@@ -455,15 +470,15 @@ class Portfolio:
         return max_drawdown(wealth)
 
     def monte_carlo_var(
-            self,
-            spot,
-            sigma,
-            yield_curve,
-            alpha          = 0.95,
-            horizon_days   = 1,
-            n_sims         = 10_000,
-            seed           = 42,
-            dividend_yield = 0.0,
+        self,
+        spot,
+        sigma,
+        yield_curve,
+        alpha=0.95,
+        horizon_days=1,
+        n_sims=10_000,
+        seed=42,
+        dividend_yield=0.0,
     ):
         """
         Description
@@ -506,7 +521,7 @@ class Portfolio:
 
         # Retrieve the risk-free rate from the yield curve at the VaR horizon.
         # Converts horizon_days to years for the yield curve lookup.
-        T              = horizon_days / 252.0
+        T = horizon_days / 252.0
         risk_free_rate = yield_curve.get_zero_rate(T)
 
         def revalue(new_spot):
@@ -517,24 +532,24 @@ class Portfolio:
                 repriced = copy.deepcopy(p["instrument"])
                 # Update the spot price on whichever attribute the instrument uses.
                 if hasattr(repriced, "S0"):
-                    repriced.S0   = new_spot    # Derivative instruments use S0.
+                    repriced.S0 = new_spot  # Derivative instruments use S0.
                 elif hasattr(repriced, "spot"):
-                    repriced.spot = new_spot    # EquityPosition uses spot.
+                    repriced.spot = new_spot  # EquityPosition uses spot.
                 total += repriced.price() * p["quantity"]
             return total
 
         # Delegate to the standalone monte_carlo_var function in risk.py.
         return monte_carlo_var(
-            revaluation_fn  = revalue,
-            initial_value   = initial_value,
-            spot            = spot,
-            sigma           = sigma,
-            horizon_days    = horizon_days,
-            alpha           = alpha,
-            n_sims          = n_sims,
-            seed            = seed,
-            risk_free_rate  = risk_free_rate,
-            dividend_yield  = dividend_yield,
+            revaluation_fn=revalue,
+            initial_value=initial_value,
+            spot=spot,
+            sigma=sigma,
+            horizon_days=horizon_days,
+            alpha=alpha,
+            n_sims=n_sims,
+            seed=seed,
+            risk_free_rate=risk_free_rate,
+            dividend_yield=dividend_yield,
         )
 
     def risk_summary(self, alpha=0.95, horizon_days=1):
@@ -559,16 +574,25 @@ class Portfolio:
         # Compute all metrics once and store — avoids repeated calls.
         h_var = self.historical_var(alpha=alpha, horizon_days=horizon_days)
         p_var = self.parametric_var(alpha=alpha, horizon_days=horizon_days)
-        es    = self.expected_shortfall(alpha=alpha, horizon_days=horizon_days)
-        mdd   = self.max_drawdown()
+        es = self.expected_shortfall(alpha=alpha, horizon_days=horizon_days)
+        mdd = self.max_drawdown()
 
         rows = [
-            {"Metric": f"Historical VaR ({alpha:.0%}, {horizon_days}d)",     "Value ($)": round(h_var, 4)},
-            {"Metric": f"Parametric VaR ({alpha:.0%}, {horizon_days}d)",     "Value ($)": round(p_var, 4)},
-            {"Metric": f"Expected Shortfall ({alpha:.0%}, {horizon_days}d)", "Value ($)": round(es, 4)},
-            {"Metric": "Max Drawdown (underlying)",                           "Value ($)": f"{mdd:.2%}"},
-            {"Metric": "Portfolio Value ($)",                                 "Value ($)": round(self.value(), 4)},
-            {"Metric": "Portfolio Delta",                                     "Value ($)": round(self.delta(), 4)},
+            {
+                "Metric": f"Historical VaR ({alpha:.0%}, {horizon_days}d)",
+                "Value ($)": round(h_var, 4),
+            },
+            {
+                "Metric": f"Parametric VaR ({alpha:.0%}, {horizon_days}d)",
+                "Value ($)": round(p_var, 4),
+            },
+            {
+                "Metric": f"Expected Shortfall ({alpha:.0%}, {horizon_days}d)",
+                "Value ($)": round(es, 4),
+            },
+            {"Metric": "Max Drawdown (underlying)", "Value ($)": f"{mdd:.2%}"},
+            {"Metric": "Portfolio Value ($)", "Value ($)": round(self.value(), 4)},
+            {"Metric": "Portfolio Delta", "Value ($)": round(self.delta(), 4)},
         ]
         return pd.DataFrame(rows).set_index("Metric")
 
@@ -594,15 +618,15 @@ class Portfolio:
         """
         returns = self._get_returns()
         return {
-            "Mean (daily)"    : round(float(returns.mean()), 6),
-            "Std Dev (daily)" : round(float(returns.std()), 6),
-            "Skewness"        : round(float(returns.skew()), 4),
+            "Mean (daily)": round(float(returns.mean()), 6),
+            "Std Dev (daily)": round(float(returns.std()), 6),
+            "Skewness": round(float(returns.skew()), 4),
             # Total (Pearson) kurtosis: pandas kurtosis() returns excess (vs normal=0),
             # so add 3 to recover the total kurtosis (normal distribution = 3).
-            "Kurtosis"        : round(float(returns.kurtosis() + 3), 4),
+            "Kurtosis": round(float(returns.kurtosis() + 3), 4),
             # Excess kurtosis: > 0 means fatter tails than normal (leptokurtic).
-            "Excess Kurtosis" : round(float(returns.kurtosis()), 4),
-            "Is Leptokurtic"  : bool(returns.kurtosis() > 0),
+            "Excess Kurtosis": round(float(returns.kurtosis()), 4),
+            "Is Leptokurtic": bool(returns.kurtosis() > 0),
         }
 
     # ------------------------------------------------------------------
@@ -638,10 +662,10 @@ class Portfolio:
         rows = []
 
         for scenario in scenarios:
-            name       = scenario["name"]
+            name = scenario["name"]
             # Default shocks of 1.0 (no change) if not specified.
             spot_shock = scenario.get("spot_shock", 1.0)
-            vol_shock  = scenario.get("vol_shock",  1.0)
+            vol_shock = scenario.get("vol_shock", 1.0)
 
             shocked_value = 0.0
             for p in self.positions:
@@ -650,9 +674,9 @@ class Portfolio:
 
                 # Apply spot shock to whichever attribute the instrument uses.
                 if hasattr(repriced, "S0"):
-                    repriced.S0    = p["instrument"].S0 * spot_shock
+                    repriced.S0 = p["instrument"].S0 * spot_shock
                 elif hasattr(repriced, "spot"):
-                    repriced.spot  = p["instrument"].spot * spot_shock
+                    repriced.spot = p["instrument"].spot * spot_shock
 
                 # Apply volatility shock if the instrument has a sigma attribute.
                 # EquityPosition has no sigma so this only affects derivatives.
@@ -661,14 +685,16 @@ class Portfolio:
 
                 shocked_value += repriced.price() * p["quantity"]
 
-            rows.append({
-                "Scenario"          : name,
-                # Format shocks as percentage strings for readability.
-                "Spot Shock"        : f"{(spot_shock - 1) * 100:+.0f}%",
-                "Vol Shock"         : f"{(vol_shock  - 1) * 100:+.0f}%",
-                "Shocked Value ($)" : round(shocked_value, 4),
-                "P&L ($)"           : round(shocked_value - base_value, 4),
-            })
+            rows.append(
+                {
+                    "Scenario": name,
+                    # Format shocks as percentage strings for readability.
+                    "Spot Shock": f"{(spot_shock - 1) * 100:+.0f}%",
+                    "Vol Shock": f"{(vol_shock  - 1) * 100:+.0f}%",
+                    "Shocked Value ($)": round(shocked_value, 4),
+                    "P&L ($)": round(shocked_value - base_value, 4),
+                }
+            )
 
         return pd.DataFrame(rows).set_index("Scenario")
 
@@ -700,41 +726,68 @@ class Portfolio:
         """
         from scipy.stats import norm as scipy_norm
 
-        returns  = self._get_returns()
+        returns = self._get_returns()
         port_val = self.value()
         # Approximate daily P&L: return * portfolio_value.
-        pnl      = returns * port_val
+        pnl = returns * port_val
 
         fig, ax = plt.subplots(figsize=(11, 5))
 
         # Empirical P&L histogram — density=True for comparability with normal curve.
-        ax.hist(pnl, bins=60, density=True, color="steelblue",
-                alpha=0.55, label="Historical P&L distribution")
+        ax.hist(
+            pnl,
+            bins=60,
+            density=True,
+            color="steelblue",
+            alpha=0.55,
+            label="Historical P&L distribution",
+        )
 
         # Fitted normal curve — shows where the normality assumption diverges.
         x_grid = np.linspace(pnl.min(), pnl.max(), 300)
-        ax.plot(x_grid, scipy_norm.pdf(x_grid, pnl.mean(), pnl.std()),
-                color="coral", linewidth=2, label="Fitted normal distribution")
+        ax.plot(
+            x_grid,
+            scipy_norm.pdf(x_grid, pnl.mean(), pnl.std()),
+            color="coral",
+            linewidth=2,
+            label="Fitted normal distribution",
+        )
 
         # Historical VaR vertical line — empirical loss threshold.
         h_var = self.historical_var(alpha=alpha)
-        ax.axvline(-h_var, color="red", linewidth=2, linestyle="--",
-                   label=f"Historical VaR ({alpha:.0%}) = ${h_var:,.2f}")
+        ax.axvline(
+            -h_var,
+            color="red",
+            linewidth=2,
+            linestyle="--",
+            label=f"Historical VaR ({alpha:.0%}) = ${h_var:,.2f}",
+        )
 
         # Parametric VaR vertical line — normal distribution loss threshold.
         p_var = self.parametric_var(alpha=alpha)
-        ax.axvline(-p_var, color="orange", linewidth=2, linestyle=":",
-                   label=f"Parametric VaR ({alpha:.0%}) = ${p_var:,.2f}")
+        ax.axvline(
+            -p_var,
+            color="orange",
+            linewidth=2,
+            linestyle=":",
+            label=f"Parametric VaR ({alpha:.0%}) = ${p_var:,.2f}",
+        )
 
         # Expected Shortfall vertical line — average loss in the worst tail.
         es = self.expected_shortfall(alpha=alpha)
-        ax.axvline(-es, color="darkred", linewidth=1.5, linestyle="-.",
-                   label=f"Expected Shortfall ({alpha:.0%}) = ${es:,.2f}")
+        ax.axvline(
+            -es,
+            color="darkred",
+            linewidth=1.5,
+            linestyle="-.",
+            label=f"Expected Shortfall ({alpha:.0%}) = ${es:,.2f}",
+        )
 
         ax.set_title(
             f"Portfolio Daily P&L Distribution\n"
             f"Historical vs Parametric VaR at {alpha:.0%} confidence",
-            fontsize=13, fontweight="bold"
+            fontsize=13,
+            fontweight="bold",
         )
         ax.set_xlabel("Daily P&L ($)")
         ax.set_ylabel("Density")
@@ -772,15 +825,14 @@ class Portfolio:
         fig, ax = plt.subplots(figsize=(10, 5))
 
         # Blue for gains, coral for losses.
-        colors = ["steelblue" if v >= 0 else "coral"
-                  for v in results["P&L ($)"]]
-        results["P&L ($)"].plot(kind="bar", ax=ax,
-                                color=colors, edgecolor="white")
+        colors = ["steelblue" if v >= 0 else "coral" for v in results["P&L ($)"]]
+        results["P&L ($)"].plot(kind="bar", ax=ax, color=colors, edgecolor="white")
 
         # Zero line separating gains from losses.
         ax.axhline(0, color="black", linewidth=0.8)
-        ax.set_title("Portfolio P&L Under Stress Scenarios",
-                     fontsize=13, fontweight="bold")
+        ax.set_title(
+            "Portfolio P&L Under Stress Scenarios", fontsize=13, fontweight="bold"
+        )
         ax.set_xlabel("Scenario")
         ax.set_ylabel("P&L ($)")
         ax.tick_params(axis="x", rotation=20)

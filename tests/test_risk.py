@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from risk import (
     historical_var,
@@ -29,10 +29,10 @@ from risk import (
     monte_carlo_var,
 )
 
-
 # ----------------------------------------------------------------------
 # Fixtures
 # ----------------------------------------------------------------------
+
 
 @pytest.fixture
 def gaussian_returns():
@@ -44,6 +44,7 @@ def gaussian_returns():
 # ----------------------------------------------------------------------
 # Historical VaR
 # ----------------------------------------------------------------------
+
 
 def test_historical_var_positive(gaussian_returns):
     """Historical VaR on symmetric returns should be positive."""
@@ -60,8 +61,12 @@ def test_historical_var_increases_with_confidence(gaussian_returns):
 
 def test_historical_var_sqrt_time_scaling(gaussian_returns):
     """10-day VaR should equal 1-day VaR * sqrt(10) (linearity of quantile)."""
-    var_1 = historical_var(gaussian_returns, alpha=0.95, horizon_days=1, portfolio_value=1_000_000)
-    var_10 = historical_var(gaussian_returns, alpha=0.95, horizon_days=10, portfolio_value=1_000_000)
+    var_1 = historical_var(
+        gaussian_returns, alpha=0.95, horizon_days=1, portfolio_value=1_000_000
+    )
+    var_10 = historical_var(
+        gaussian_returns, alpha=0.95, horizon_days=10, portfolio_value=1_000_000
+    )
     assert abs(var_10 - var_1 * np.sqrt(10)) < 1.0  # to within $1
 
 
@@ -76,9 +81,11 @@ def test_historical_var_scales_with_portfolio_value(gaussian_returns):
 # Parametric VaR
 # ----------------------------------------------------------------------
 
+
 def test_parametric_var_matches_formula(gaussian_returns):
     """Parametric VaR should equal z * sigma * V exactly on the data."""
     from scipy.stats import norm
+
     sigma = gaussian_returns.std(ddof=1)
     z = norm.ppf(0.95)
     expected = z * sigma * 1_000_000
@@ -98,6 +105,7 @@ def test_parametric_var_close_to_historical_on_gaussian(gaussian_returns):
 # Expected Shortfall
 # ----------------------------------------------------------------------
 
+
 def test_expected_shortfall_geq_var(gaussian_returns):
     """ES should always be >= historical VaR (coherence property)."""
     var = historical_var(gaussian_returns, alpha=0.95, portfolio_value=1_000_000)
@@ -107,14 +115,19 @@ def test_expected_shortfall_geq_var(gaussian_returns):
 
 def test_expected_shortfall_scales_with_horizon(gaussian_returns):
     """10-day ES should equal 1-day ES * sqrt(10)."""
-    es_1 = expected_shortfall(gaussian_returns, alpha=0.95, horizon_days=1, portfolio_value=1_000_000)
-    es_10 = expected_shortfall(gaussian_returns, alpha=0.95, horizon_days=10, portfolio_value=1_000_000)
+    es_1 = expected_shortfall(
+        gaussian_returns, alpha=0.95, horizon_days=1, portfolio_value=1_000_000
+    )
+    es_10 = expected_shortfall(
+        gaussian_returns, alpha=0.95, horizon_days=10, portfolio_value=1_000_000
+    )
     assert abs(es_10 - es_1 * np.sqrt(10)) < 1.0
 
 
 # ----------------------------------------------------------------------
 # Max Drawdown
 # ----------------------------------------------------------------------
+
 
 def test_mdd_monotonic_increasing_is_zero():
     """A monotonically increasing series has zero drawdown."""
@@ -130,7 +143,7 @@ def test_mdd_monotonic_decreasing():
 def test_mdd_specific_peak_trough():
     """100 -> 120 -> 80 -> 90 -> 110 should give MDD = (120-80)/120 = 1/3."""
     mdd = max_drawdown([100, 120, 80, 90, 110])
-    assert abs(mdd - 1/3) < 1e-10
+    assert abs(mdd - 1 / 3) < 1e-10
 
 
 def test_mdd_empty_series_raises():
@@ -142,6 +155,7 @@ def test_mdd_empty_series_raises():
 # ----------------------------------------------------------------------
 # Monte Carlo VaR
 # ----------------------------------------------------------------------
+
 
 def test_mc_var_pure_equity_matches_parametric():
     """
@@ -165,6 +179,7 @@ def test_mc_var_pure_equity_matches_parametric():
 
     # Expected parametric VaR for $1M of stock, 20% vol, 10-day, 95%
     from scipy.stats import norm
+
     T = 10 / 252
     expected = norm.ppf(0.95) * 0.20 * np.sqrt(T) * initial_value
 
@@ -207,6 +222,7 @@ def test_mc_var_es_geq_var():
 # ----------------------------------------------------------------------
 # Input validation
 # ----------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("alpha", [-0.1, 0, 1.0, 1.5])
 def test_invalid_alpha_raises(alpha, gaussian_returns):

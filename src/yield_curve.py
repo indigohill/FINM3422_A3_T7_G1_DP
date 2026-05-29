@@ -339,6 +339,7 @@ class YieldCurve:
 # Convenience Function
 # --------------------------------------------------------------------------------------------------
 
+
 def load_yield_curve(interpolation="linear", compounding="continuous"):
     """
     Description
@@ -361,7 +362,9 @@ def load_yield_curve(interpolation="linear", compounding="continuous"):
     - Yield curve built from the latest RBA F17 data.
     """
     # Construct the yield curve from the latest RBA F17 data.
-    yield_curve = YieldCurve.from_rba(interpolation=interpolation, compounding=compounding)
+    yield_curve = YieldCurve.from_rba(
+        interpolation=interpolation, compounding=compounding
+    )
 
     # Confirm rates at key option maturities.
     print("Risk-free rates at key option maturities (from RBA F17):")

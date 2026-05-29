@@ -46,8 +46,6 @@ STOCKS = {
     "CBA": {"ticker": "CBA.AX", "sector": "Banking"},
     "BHP": {"ticker": "BHP.AX", "sector": "Materials"},
     "CSL": {"ticker": "CSL.AX", "sector": "Healthcare"},
-    "WES": {"ticker": "WES.AX", "sector": "Retail"},
-    "TLS": {"ticker": "TLS.AX", "sector": "Telecommunications"},
 }
 
 
