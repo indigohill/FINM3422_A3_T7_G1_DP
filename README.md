@@ -28,8 +28,8 @@ FINM3422_A3_T7_G1_DP/
 ├── AI_USAGE.md                     ← AI tooling acknowledgement
 │
 ├── data/                           ← cached data for offline reproducibility
-│   ├── F17_DATA_RAW.xlsx           ← raw RBA F17 download
-│   ├── F17_DATA_CLEAN.csv          ← cleaned yield curve, generated on first run
+│   ├── F17_data_raw.xlsx           ← raw RBA F17 download
+│   ├── F17_data_clean.csv          ← cleaned yield curve, generated on first run
 │   ├── equity_data.csv             ← spot, volatility, dividend yield per ticker (yfinance cache)
 │   └── equity_returns.csv          ← 2y daily log returns per ticker
 │
@@ -39,7 +39,7 @@ FINM3422_A3_T7_G1_DP/
 ├── notebooks/                      ← analysis notebooks (run in order)
 │   ├── 01_yield_curve.ipynb        ← curve construction, interpolation comparison
 │   ├── 02_derivative.ipynb         ← option pricing engine and Greeks across the universe
-│   └── 04_trading_desk_analysis.ipynb  ← final integrated dashboard with positions, scenarios, risk analytics
+│   └── 03_trading_desk_analysis.ipynb  ← final integrated dashboard with positions, scenarios, risk analytics
 │
 └── src/                            ← reusable Python modules
     ├── data_loader_yieldcurve.py   ← RBA F17 ingestion and CSV caching
